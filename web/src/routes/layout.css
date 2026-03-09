@@ -1,0 +1,24 @@
+@import 'tailwindcss';
+
+:root {
+	--bg: #FAF9F6;
+	--bg-dark: #1A1A1A;
+	--text: #2C2C2C;
+	--text-dark: #D4D4D4;
+	--text-muted: #9A9A9A;
+	--text-muted-dark: #666;
+	--accent: #8B7355;
+	--toolbar-bg: rgba(255, 255, 255, 0.9);
+	--toolbar-bg-dark: rgba(30, 30, 30, 0.9);
+}
+
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+html, body {
+	height: 100%;
+	overflow: hidden;
+}
