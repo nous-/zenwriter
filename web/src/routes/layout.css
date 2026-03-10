@@ -3,13 +3,18 @@
 :root {
 	--bg: #FAF9F6;
 	--bg-dark: #1A1A1A;
+	--bg-mono: #000000;
 	--text: #2C2C2C;
 	--text-dark: #D4D4D4;
+	--text-mono: #ffffff;
 	--text-muted: #9A9A9A;
 	--text-muted-dark: #666;
+	--text-muted-mono: #888888;
 	--accent: #8B7355;
+	--accent-mono: #ffffff;
 	--toolbar-bg: rgba(255, 255, 255, 0.9);
 	--toolbar-bg-dark: rgba(30, 30, 30, 0.9);
+	--toolbar-bg-mono: rgba(0, 0, 0, 0.95);
 }
 
 * {

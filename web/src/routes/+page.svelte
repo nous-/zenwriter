@@ -24,7 +24,14 @@
 	let lastSaved = $state('');
 	let isFullscreen = $state(false);
 	let toolbarVisible = $state(true);
-	let darkMode = $state(false);
+	const THEMES = [
+		{ id: 'light', label: 'Light' },
+		{ id: 'dark', label: 'Dark' },
+		{ id: 'mono', label: 'Black & white' }
+	];
+	let theme = $state('light');
+	let themeOpen = $state(false);
+	let themePopoverEl = $state(null);
 	let saveFlash = $state(false);
 	let fontSize = $state(19);
 	let fontSizeOpen = $state(false);
@@ -71,7 +78,7 @@
 		try {
 			localStorage.setItem(STORAGE_KEY, content);
 			localStorage.setItem(TITLE_KEY, title);
-			localStorage.setItem('zenwriter_dark', darkMode ? '1' : '0');
+			localStorage.setItem('zenwriter_theme', theme);
 			localStorage.setItem('zenwriter_fontsize', String(fontSize));
 			localStorage.setItem('zenwriter_typesounds', typeSounds ? '1' : '0');
 			const now = new Date();
@@ -83,7 +90,8 @@
 		try {
 			content = localStorage.getItem(STORAGE_KEY) || '';
 			title = localStorage.getItem(TITLE_KEY) || '';
-			darkMode = localStorage.getItem('zenwriter_dark') === '1';
+			const savedTheme = localStorage.getItem('zenwriter_theme');
+			if (savedTheme === 'dark' || savedTheme === 'mono' || savedTheme === 'light') theme = savedTheme;
 			const savedSize = parseInt(localStorage.getItem('zenwriter_fontsize') || '');
 			if (savedSize >= 12 && savedSize <= 32) fontSize = savedSize;
 			typeSounds = localStorage.getItem('zenwriter_typesounds') === '1';
@@ -164,8 +172,26 @@
 		}
 	}
 
+	function toggleThemeDropdown(e) {
+		e.stopPropagation();
+		themeOpen = !themeOpen;
+		if (themeOpen) fontSizeOpen = false;
+	}
+
+	function handleClickOutsideTheme(e) {
+		if (themeOpen && themePopoverEl && !themePopoverEl.contains(e.target)) {
+			themeOpen = false;
+		}
+	}
+
+	function setTheme(id) {
+		theme = id;
+		themeOpen = false;
+		saveToStorage();
+	}
+
 	function focusEditor() {
-		if (!fontSizeOpen) textareaEl?.focus();
+		if (!fontSizeOpen && !themeOpen) textareaEl?.focus();
 	}
 
 	onMount(() => {
@@ -174,6 +200,7 @@
 		document.addEventListener('fullscreenchange', handleFullscreenChange);
 		document.addEventListener('mousemove', showToolbar);
 		document.addEventListener('mousedown', handleClickOutsideFontSize);
+		document.addEventListener('mousedown', handleClickOutsideTheme);
 
 		return () => {
 			saveToStorage();
@@ -182,6 +209,7 @@
 			document.removeEventListener('fullscreenchange', handleFullscreenChange);
 			document.removeEventListener('mousemove', showToolbar);
 			document.removeEventListener('mousedown', handleClickOutsideFontSize);
+			document.removeEventListener('mousedown', handleClickOutsideTheme);
 		};
 	});
 </script>
@@ -189,7 +217,8 @@
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
 	class="writer-root"
-	class:dark={darkMode}
+	class:theme-dark={theme === 'dark'}
+	class:theme-mono={theme === 'mono'}
 	role="application"
 	onclick={focusEditor}
 	onkeydown={handleKeydown}
@@ -245,13 +274,22 @@
 				{/if}
 			</button>
 
-			<button class="tb-btn" onclick={(e) => { e.stopPropagation(); darkMode = !darkMode; saveToStorage(); }} title="Toggle theme">
-				{#if darkMode}
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-				{:else}
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+			<div class="theme-wrapper" bind:this={themePopoverEl}>
+				<button class="tb-btn" class:tb-btn-active={themeOpen} onclick={toggleThemeDropdown} title="Theme">
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+				</button>
+				{#if themeOpen}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<div class="theme-popover" onclick={(e) => e.stopPropagation()}>
+						{#each THEMES as t}
+							<button type="button" class="theme-option" class:theme-option-active={theme === t.id} onclick={() => setTheme(t.id)}>
+								{t.label}
+							</button>
+						{/each}
+					</div>
 				{/if}
-			</button>
+			</div>
 
 			<button class="tb-btn" onclick={(e) => { e.stopPropagation(); downloadFile(); }} title="Download">
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -311,9 +349,14 @@
 		cursor: text;
 	}
 
-	.writer-root.dark {
+	.writer-root.theme-dark {
 		background-color: var(--bg-dark);
 		color: var(--text-dark);
+	}
+
+	.writer-root.theme-mono {
+		background-color: var(--bg-mono);
+		color: var(--text-mono);
 	}
 
 	/* Toolbar */
@@ -343,8 +386,13 @@
 		user-select: none;
 	}
 
-	.dark .brand {
+	.theme-dark .brand,
+	.theme-mono .brand {
 		color: var(--text-muted-dark);
+	}
+
+	.theme-mono .brand {
+		color: var(--text-muted-mono);
 	}
 
 	.toolbar-center {
@@ -374,12 +422,21 @@
 		color: var(--text-muted);
 	}
 
-	.dark .title-input::placeholder {
+	.theme-dark .title-input::placeholder,
+	.theme-mono .title-input::placeholder {
 		color: var(--text-muted-dark);
+	}
+
+	.theme-mono .title-input::placeholder {
+		color: var(--text-muted-mono);
 	}
 
 	.title-input:focus {
 		border-bottom-color: var(--accent);
+	}
+
+	.theme-mono .title-input:focus {
+		border-bottom-color: var(--accent-mono);
 	}
 
 	.toolbar-left,
@@ -413,13 +470,23 @@
 		color: var(--text);
 	}
 
-	.dark .tb-btn {
+	.theme-dark .tb-btn,
+	.theme-mono .tb-btn {
 		color: var(--text-muted-dark);
 	}
 
-	.dark .tb-btn:hover {
+	.theme-mono .tb-btn {
+		color: var(--text-muted-mono);
+	}
+
+	.theme-dark .tb-btn:hover,
+	.theme-mono .tb-btn:hover {
 		background: rgba(255, 255, 255, 0.08);
 		color: var(--text-dark);
+	}
+
+	.theme-mono .tb-btn:hover {
+		color: var(--text-mono);
 	}
 
 	.tb-btn-active {
@@ -427,9 +494,87 @@
 		color: var(--text);
 	}
 
-	.dark .tb-btn-active {
+	.theme-dark .tb-btn-active,
+	.theme-mono .tb-btn-active {
 		background: rgba(255, 255, 255, 0.1);
 		color: var(--text-dark);
+	}
+
+	.theme-mono .tb-btn-active {
+		color: var(--text-mono);
+	}
+
+	.theme-wrapper {
+		position: relative;
+	}
+
+	.theme-popover {
+		position: absolute;
+		top: calc(100% + 8px);
+		right: 0;
+		display: flex;
+		flex-direction: column;
+		min-width: 140px;
+		padding: 6px 0;
+		background: var(--toolbar-bg);
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 10px;
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+		backdrop-filter: blur(12px);
+		z-index: 100;
+	}
+
+	.theme-dark .theme-popover,
+	.theme-mono .theme-popover {
+		background: var(--toolbar-bg-dark);
+		border-color: rgba(255, 255, 255, 0.08);
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+	}
+
+	.theme-mono .theme-popover {
+		background: var(--toolbar-bg-mono);
+	}
+
+	.theme-option {
+		display: block;
+		width: 100%;
+		padding: 8px 14px;
+		border: none;
+		background: transparent;
+		color: var(--text);
+		font-family: 'Literata', Georgia, serif;
+		font-size: 13px;
+		text-align: left;
+		cursor: pointer;
+		transition: background 0.15s ease, color 0.15s ease;
+	}
+
+	.theme-option:hover {
+		background: rgba(0, 0, 0, 0.05);
+	}
+
+	.theme-dark .theme-option,
+	.theme-mono .theme-option {
+		color: var(--text-dark);
+	}
+
+	.theme-mono .theme-option {
+		color: var(--text-mono);
+	}
+
+	.theme-dark .theme-option:hover,
+	.theme-mono .theme-option:hover {
+		background: rgba(255, 255, 255, 0.08);
+	}
+
+	.theme-option-active {
+		background: rgba(0, 0, 0, 0.06);
+		font-weight: 500;
+	}
+
+	.theme-dark .theme-option-active,
+	.theme-mono .theme-option-active {
+		background: rgba(255, 255, 255, 0.12);
 	}
 
 	.font-size-wrapper {
@@ -453,10 +598,15 @@
 		z-index: 100;
 	}
 
-	.dark .font-size-popover {
+	.theme-dark .font-size-popover,
+	.theme-mono .font-size-popover {
 		background: var(--toolbar-bg-dark);
 		border-color: rgba(255, 255, 255, 0.08);
 		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+	}
+
+	.theme-mono .font-size-popover {
+		background: var(--toolbar-bg-mono);
 	}
 
 	.fs-label {
@@ -468,8 +618,13 @@
 		user-select: none;
 	}
 
-	.dark .fs-label {
+	.theme-dark .fs-label,
+	.theme-mono .fs-label {
 		color: var(--text-muted-dark);
+	}
+
+	.theme-mono .fs-label {
+		color: var(--text-muted-mono);
 	}
 
 	.fs-slider {
@@ -482,6 +637,10 @@
 		cursor: pointer;
 	}
 
+	.theme-mono .fs-slider {
+		accent-color: var(--accent-mono);
+	}
+
 	.fs-range-label {
 		font-family: 'Literata', Georgia, serif;
 		color: var(--text-muted);
@@ -489,8 +648,13 @@
 		line-height: 1;
 	}
 
-	.dark .fs-range-label {
+	.theme-dark .fs-range-label,
+	.theme-mono .fs-range-label {
 		color: var(--text-muted-dark);
+	}
+
+	.theme-mono .fs-range-label {
+		color: var(--text-muted-mono);
 	}
 
 	.fs-small {
@@ -540,8 +704,17 @@
 		font-weight: 300;
 	}
 
-	.dark .editor::placeholder {
+	.theme-dark .editor::placeholder,
+	.theme-mono .editor::placeholder {
 		color: var(--text-muted-dark);
+	}
+
+	.theme-mono .editor::placeholder {
+		color: var(--text-muted-mono);
+	}
+
+	.theme-mono .editor {
+		caret-color: var(--accent-mono);
 	}
 
 	/* Status bar */
@@ -569,12 +742,21 @@
 		transition: color 0.3s ease;
 	}
 
-	.dark .status-item {
+	.theme-dark .status-item,
+	.theme-mono .status-item {
 		color: var(--text-muted-dark);
+	}
+
+	.theme-mono .status-item {
+		color: var(--text-muted-mono);
 	}
 
 	.status-item.flash {
 		color: var(--accent);
+	}
+
+	.theme-mono .status-item.flash {
+		color: var(--accent-mono);
 	}
 
 	.status-sep {
@@ -583,8 +765,13 @@
 		margin: 0 6px;
 	}
 
-	.dark .status-sep {
+	.theme-dark .status-sep,
+	.theme-mono .status-sep {
 		color: var(--text-muted-dark);
+	}
+
+	.theme-mono .status-sep {
+		color: var(--text-muted-mono);
 	}
 
 	.status-left,
