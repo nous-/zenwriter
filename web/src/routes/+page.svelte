@@ -14,8 +14,6 @@
 	const DOCS_LIST_KEY = 'zenwriter_docs';
 	const DOC_CONTENT_KEY = (id) => `zenwriter_doc_${id}`;
 	const AUTOSAVE_MS = 2000;
-	/** @type {(d: { id: string; title: string; updatedAt: number })[]} */
-	const defaultDocsList = [];
 
 	const KEY_SOUNDS = [key0, key1, key2, key3, key4, key5, key6];
 
@@ -43,7 +41,8 @@
 	let fontSizeOpen = $state(false);
 	let fontSizePopoverEl = $state(null);
 	let typeSounds = $state(false);
-	let textareaEl = $state(null);
+	/** @type {HTMLDivElement | null} */
+	let editorEl = $state(null);
 	/** @type {HTMLDivElement | null} */
 	let titleEl = $state(null);
 	let hideTimer = null;
@@ -134,6 +133,7 @@
 			updateCounts();
 			await tick();
 			if (titleEl) titleEl.textContent = title;
+			if (editorEl) editorEl.textContent = content;
 		} catch {}
 	}
 
@@ -152,6 +152,7 @@
 		lastSaved = '';
 		await tick();
 		if (titleEl) titleEl.textContent = title;
+		if (editorEl) editorEl.textContent = content;
 	}
 
 	function backToList() {
@@ -170,6 +171,7 @@
 	}
 
 	function handleInput() {
+		content = editorEl?.textContent ?? '';
 		updateCounts();
 		scheduleAutosave();
 	}
@@ -211,7 +213,8 @@
 	function resetToolbarTimer() {
 		clearTimeout(hideTimer);
 		hideTimer = setTimeout(() => {
-			if (document.activeElement === textareaEl) {
+			const active = document.activeElement;
+			if (active === editorEl || active === titleEl) {
 				toolbarVisible = false;
 			}
 		}, 3000);
@@ -256,7 +259,7 @@
 	}
 
 	function focusEditor() {
-		if (!fontSizeOpen && !themeOpen) textareaEl?.focus();
+		if (!fontSizeOpen && !themeOpen) editorEl?.focus();
 	}
 
 	onMount(() => {
@@ -341,7 +344,7 @@
 			<button class="tb-btn tb-btn-icon" onclick={(e) => { e.stopPropagation(); backToList(); }} title="Back to documents">
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 18 9 12 15 6"/></svg>
 			</button>
-			<span class="brand">ZenWriter</span>
+			<span class="brand brand-link" onclick={(e) => { e.stopPropagation(); backToList(); }}>ZenWriter</span>
 		</div>
 
 		<div class="toolbar-right">
@@ -409,39 +412,47 @@
 		</div>
 	</header>
 
-	<!-- Document title (editor view) -->
-	<div class="doc-title-wrap">
-		<div class="doc-title-inner" style="font-size: {fontSize}px;">
-			<span class="doc-title-placeholder" class:hidden={title.length > 0}>Untitled</span>
-			<div
-				class="doc-title-input"
-				contenteditable="true"
-				role="textbox"
-				aria-label="Document title"
-				tabindex="0"
-				bind:this={titleEl}
-				oninput={() => { title = titleEl?.textContent ?? ''; scheduleAutosave(); }}
-				onpaste={(e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData?.getData('text/plain') ?? ''); }}
-				onclick={(e) => e.stopPropagation()}
-				onkeydown={(e) => { handleEditorKeydown(e); if (e.key === 's' && (e.metaKey || e.ctrlKey)) return; e.stopPropagation(); }}
-			></div>
-		</div>
-	</div>
-
-	<!-- Editor area -->
+	<!-- Editor area (title + body scroll together) -->
 	<main class="editor-wrap">
 		{#if loaded}
-			<textarea
-				bind:this={textareaEl}
-				bind:value={content}
-				oninput={handleInput}
-				onkeydown={handleEditorKeydown}
-				onclick={(e) => e.stopPropagation()}
-				class="editor"
-				style="font-size: {fontSize}px;"
-				placeholder="Begin writing..."
-				spellcheck="true"
-			></textarea>
+			<div class="editor-inner">
+				<div class="doc-title-wrap">
+					<div class="doc-title-inner" style="font-size: {fontSize}px;">
+						<span class="doc-title-placeholder" class:hidden={title.length > 0}>Untitled</span>
+						<div
+							class="doc-title-input"
+							contenteditable="true"
+							role="textbox"
+							aria-label="Document title"
+							tabindex="0"
+							bind:this={titleEl}
+							onfocus={showToolbar}
+							oninput={() => { title = titleEl?.textContent ?? ''; scheduleAutosave(); }}
+							onpaste={(e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData?.getData('text/plain') ?? ''); }}
+							onclick={(e) => e.stopPropagation()}
+							onkeydown={(e) => { handleEditorKeydown(e); if (e.key === 's' && (e.metaKey || e.ctrlKey)) return; e.stopPropagation(); }}
+						></div>
+					</div>
+				</div>
+				<div class="editor-body-wrap">
+					<span class="editor-placeholder" class:hidden={content.length > 0}>Begin writing...</span>
+					<div
+						class="editor"
+						contenteditable="true"
+						role="textbox"
+						aria-label="Document body"
+						tabindex="0"
+						spellcheck="true"
+						style="font-size: {fontSize}px;"
+						bind:this={editorEl}
+						onfocus={showToolbar}
+						oninput={handleInput}
+						onkeydown={handleEditorKeydown}
+						onpaste={(e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData?.getData('text/plain') ?? ''); }}
+						onclick={(e) => e.stopPropagation()}
+					></div>
+				</div>
+			</div>
 		{/if}
 	</main>
 
@@ -510,6 +521,22 @@
 		user-select: none;
 	}
 
+	.brand-link {
+		cursor: pointer;
+	}
+
+	.brand-link:hover {
+		color: var(--text);
+	}
+
+	.theme-dark .brand-link:hover {
+		color: var(--text-dark);
+	}
+
+	.theme-mono .brand-link:hover {
+		color: var(--text-mono);
+	}
+
 	.theme-dark .brand,
 	.theme-mono .brand {
 		color: var(--text-muted-dark);
@@ -520,12 +547,9 @@
 	}
 
 	.doc-title-wrap {
-		flex-shrink: 0;
 		display: flex;
 		justify-content: center;
-		padding: 20px 24px 32px;
-		max-width: 680px;
-		margin: 0 auto;
+		padding: 20px 0 32px;
 		width: 100%;
 	}
 
@@ -971,10 +995,46 @@
 	/* Editor */
 	.editor-wrap {
 		flex: 1;
-		display: flex;
-		justify-content: center;
 		overflow-y: auto;
-		padding: 24px 24px 0;
+		padding: 0 24px;
+	}
+
+	.editor-inner {
+		width: 100%;
+		max-width: 680px;
+		margin: 0 auto;
+		display: flex;
+		flex-direction: column;
+		padding-top: 24px;
+		padding-bottom: 0;
+	}
+
+	.editor-body-wrap {
+		position: relative;
+		flex: 1;
+	}
+
+	.editor-placeholder {
+		position: absolute;
+		top: 0;
+		left: 0;
+		font-family: 'Literata', Georgia, serif;
+		font-weight: 300;
+		font-style: italic;
+		color: var(--text-muted);
+		pointer-events: none;
+	}
+
+	.editor-placeholder.hidden {
+		display: none;
+	}
+
+	.theme-dark .editor-placeholder {
+		color: var(--text-muted-dark);
+	}
+
+	.theme-mono .editor-placeholder {
+		color: var(--text-muted-mono);
 	}
 
 	.editor {
@@ -982,35 +1042,14 @@
 		font-weight: 300;
 		line-height: 1.8;
 		color: inherit;
-		background: transparent;
-		border: none;
 		outline: none;
-		resize: none;
 		width: 100%;
-		max-width: 680px;
-		padding: 20px 0 120px 0;
+		min-height: 200px;
+		padding-bottom: 120px;
 		caret-color: var(--accent);
-		overflow-y: auto;
-		scrollbar-width: none;
-	}
-
-	.editor::-webkit-scrollbar {
-		display: none;
-	}
-
-	.editor::placeholder {
-		color: var(--text-muted);
-		font-style: italic;
-		font-weight: 300;
-	}
-
-	.theme-dark .editor::placeholder,
-	.theme-mono .editor::placeholder {
-		color: var(--text-muted-dark);
-	}
-
-	.theme-mono .editor::placeholder {
-		color: var(--text-muted-mono);
+		overflow-wrap: break-word;
+		word-wrap: break-word;
+		white-space: pre-wrap;
 	}
 
 	.theme-mono .editor {
@@ -1092,7 +1131,7 @@
 		}
 
 		.editor {
-			padding: 16px 0 80px 0;
+			padding-bottom: 80px;
 		}
 
 		.toolbar {
