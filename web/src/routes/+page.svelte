@@ -11,12 +11,18 @@
 	import key5 from '$lib/sounds/key-5.mp3';
 	import key6 from '$lib/sounds/key-6.mp3';
 
-	const STORAGE_KEY = 'zenwriter_doc';
-	const TITLE_KEY = 'zenwriter_title';
+	const DOCS_LIST_KEY = 'zenwriter_docs';
+	const DOC_CONTENT_KEY = (id) => `zenwriter_doc_${id}`;
 	const AUTOSAVE_MS = 2000;
+	/** @type {(d: { id: string; title: string; updatedAt: number })[]} */
+	const defaultDocsList = [];
 
 	const KEY_SOUNDS = [key0, key1, key2, key3, key4, key5, key6];
 
+	/** @type {{ id: string; title: string; updatedAt: number }[]} */
+	let documents = $state([]);
+	/** @type {string | null} */
+	let currentDocId = $state(null);
 	let title = $state('');
 	let content = $state('');
 	let wordCount = $state(0);
@@ -74,29 +80,82 @@
 		charCount = content.length;
 	}
 
+	function loadDocumentsList() {
+		try {
+			const raw = localStorage.getItem(DOCS_LIST_KEY);
+			if (raw) {
+				const list = JSON.parse(raw);
+				if (Array.isArray(list)) {
+					documents = list.filter((d) => d && typeof d.id === 'string' && typeof d.title === 'string' && typeof d.updatedAt === 'number');
+					return;
+				}
+			}
+		} catch {}
+		documents = [];
+	}
+
 	function saveToStorage() {
 		try {
-			localStorage.setItem(STORAGE_KEY, content);
-			localStorage.setItem(TITLE_KEY, title);
+			if (currentDocId) {
+				localStorage.setItem(DOC_CONTENT_KEY(currentDocId), content);
+				const now = Date.now();
+				const list = documents.map((d) =>
+					d.id === currentDocId ? { ...d, title: title.trim() || 'Untitled', updatedAt: now } : d
+				);
+				documents = list;
+				localStorage.setItem(DOCS_LIST_KEY, JSON.stringify(documents));
+				lastSaved = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+			}
 			localStorage.setItem('zenwriter_theme', theme);
 			localStorage.setItem('zenwriter_fontsize', String(fontSize));
 			localStorage.setItem('zenwriter_typesounds', typeSounds ? '1' : '0');
-			const now = new Date();
-			lastSaved = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 		} catch {}
 	}
 
-	function loadFromStorage() {
+	function loadGlobalPrefs() {
 		try {
-			content = localStorage.getItem(STORAGE_KEY) || '';
-			title = localStorage.getItem(TITLE_KEY) || '';
 			const savedTheme = localStorage.getItem('zenwriter_theme');
 			if (savedTheme === 'dark' || savedTheme === 'mono' || savedTheme === 'light') theme = savedTheme;
 			const savedSize = parseInt(localStorage.getItem('zenwriter_fontsize') || '');
 			if (savedSize >= 12 && savedSize <= 32) fontSize = savedSize;
 			typeSounds = localStorage.getItem('zenwriter_typesounds') === '1';
+		} catch {}
+	}
+
+	function openDoc(id) {
+		const doc = documents.find((d) => d.id === id);
+		if (!doc) return;
+		try {
+			content = localStorage.getItem(DOC_CONTENT_KEY(id)) ?? '';
+			title = doc.title;
+			currentDocId = id;
 			updateCounts();
 		} catch {}
+	}
+
+	function newDoc() {
+		saveToStorage();
+		const id = crypto.randomUUID?.() ?? `doc-${Date.now()}`;
+		const now = Date.now();
+		documents = [{ id, title: 'Untitled', updatedAt: now }, ...documents];
+		localStorage.setItem(DOC_CONTENT_KEY(id), '');
+		localStorage.setItem(DOCS_LIST_KEY, JSON.stringify(documents));
+		content = '';
+		title = 'Untitled';
+		currentDocId = id;
+		wordCount = 0;
+		charCount = 0;
+		lastSaved = '';
+	}
+
+	function backToList() {
+		saveToStorage();
+		currentDocId = null;
+		content = '';
+		title = '';
+		wordCount = 0;
+		charCount = 0;
+		lastSaved = '';
 	}
 
 	function scheduleAutosave() {
@@ -195,7 +254,8 @@
 	}
 
 	onMount(() => {
-		loadFromStorage();
+		loadGlobalPrefs();
+		loadDocumentsList();
 		loaded = true;
 		document.addEventListener('fullscreenchange', handleFullscreenChange);
 		document.addEventListener('mousemove', showToolbar);
@@ -223,9 +283,58 @@
 	onclick={focusEditor}
 	onkeydown={handleKeydown}
 >
-	<!-- Toolbar -->
+	<!-- Document list view -->
+	{#if loaded && currentDocId === null}
+		<header class="toolbar doc-list-toolbar">
+			<span class="brand">ZenWriter</span>
+			<div class="toolbar-right">
+				<div class="theme-wrapper" bind:this={themePopoverEl}>
+					<button class="tb-btn" class:tb-btn-active={themeOpen} onclick={toggleThemeDropdown} title="Theme">
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+					</button>
+					{#if themeOpen}
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<div class="theme-popover" onclick={(e) => e.stopPropagation()}>
+							{#each THEMES as t}
+								<button type="button" class="theme-option" class:theme-option-active={theme === t.id} onclick={() => setTheme(t.id)}>
+									{t.label}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
+			</div>
+		</header>
+		<main class="doc-list-wrap">
+			<button type="button" class="doc-list-add-btn" onclick={newDoc} title="New document">
+				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+			</button>
+			{#if documents.length === 0}
+				<div class="doc-list-empty">
+					<p class="doc-list-empty-title">No documents yet</p>
+					<p class="doc-list-empty-hint">Click + above to create your first document.</p>
+				</div>
+			{:else}
+				<ul class="doc-list">
+					{#each [...documents].sort((a, b) => b.updatedAt - a.updatedAt) as doc (doc.id)}
+						<li>
+							<button type="button" class="doc-list-item" onclick={() => openDoc(doc.id)}>
+								<span class="doc-list-item-title">{doc.title}</span>
+								<span class="doc-list-item-date">{new Date(doc.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</main>
+	{:else}
+	<!-- Toolbar (editor view) -->
 	<header class="toolbar" class:toolbar-hidden={!toolbarVisible}>
 		<div class="toolbar-left">
+			<button class="tb-btn tb-btn-icon" onclick={(e) => { e.stopPropagation(); backToList(); }} title="Back to documents">
+				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 18 9 12 15 6"/></svg>
+			</button>
 			<span class="brand">ZenWriter</span>
 		</div>
 
@@ -335,6 +444,7 @@
 			<span class="status-item">{charCount} {charCount === 1 ? 'char' : 'chars'}</span>
 		</div>
 	</footer>
+	{/if}
 </div>
 
 <style>
@@ -449,6 +559,169 @@
 
 	.toolbar-right {
 		justify-content: flex-end;
+	}
+
+	.doc-list-toolbar {
+		justify-content: space-between;
+	}
+
+	.doc-list-toolbar .toolbar-right {
+		min-width: auto;
+		gap: 8px;
+	}
+
+	.doc-list-wrap {
+		flex: 1;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 48px 24px;
+	}
+
+	.doc-list-empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 12px;
+		text-align: center;
+		padding: 48px 24px;
+	}
+
+	.doc-list-empty-title {
+		font-family: 'Literata', Georgia, serif;
+		font-size: 18px;
+		font-weight: 500;
+		color: var(--text);
+	}
+
+	.theme-dark .doc-list-empty-title,
+	.theme-mono .doc-list-empty-title {
+		color: var(--text-dark);
+	}
+
+	.theme-mono .doc-list-empty-title {
+		color: var(--text-mono);
+	}
+
+	.doc-list-empty-hint {
+		font-family: 'Literata', Georgia, serif;
+		font-size: 14px;
+		color: var(--text-muted);
+	}
+
+	.theme-dark .doc-list-empty-hint,
+	.theme-mono .doc-list-empty-hint {
+		color: var(--text-muted-dark);
+	}
+
+	.doc-list-add-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 44px;
+		height: 44px;
+		margin-bottom: 16px;
+		border: none;
+		border-radius: 50%;
+		background: rgba(0, 0, 0, 0.06);
+		color: var(--text-muted);
+		cursor: pointer;
+		transition: background 0.2s ease, color 0.2s ease;
+		flex-shrink: 0;
+	}
+
+	.doc-list-add-btn:hover {
+		background: rgba(0, 0, 0, 0.1);
+		color: var(--text);
+	}
+
+	.theme-dark .doc-list-add-btn,
+	.theme-mono .doc-list-add-btn {
+		background: rgba(255, 255, 255, 0.08);
+		color: var(--text-muted-dark);
+	}
+
+	.theme-dark .doc-list-add-btn:hover,
+	.theme-mono .doc-list-add-btn:hover {
+		background: rgba(255, 255, 255, 0.14);
+		color: var(--text-dark);
+	}
+
+	.theme-mono .doc-list-add-btn:hover {
+		color: var(--text-mono);
+	}
+
+	.doc-list {
+		list-style: none;
+		width: 100%;
+		max-width: 480px;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	.doc-list-item {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		width: 100%;
+		padding: 16px 20px;
+		border: none;
+		border-radius: 12px;
+		background: rgba(0, 0, 0, 0.03);
+		color: var(--text);
+		font-family: 'Literata', Georgia, serif;
+		text-align: left;
+		cursor: pointer;
+		transition: background 0.2s ease, color 0.2s ease;
+	}
+
+	.doc-list-item:hover {
+		background: rgba(0, 0, 0, 0.06);
+	}
+
+	.theme-dark .doc-list-item,
+	.theme-mono .doc-list-item {
+		background: rgba(255, 255, 255, 0.06);
+		color: var(--text-dark);
+	}
+
+	.theme-dark .doc-list-item:hover,
+	.theme-mono .doc-list-item:hover {
+		background: rgba(255, 255, 255, 0.1);
+	}
+
+	.theme-mono .doc-list-item {
+		background: rgba(255, 255, 255, 0.06);
+		color: var(--text-mono);
+	}
+
+	.theme-mono .doc-list-item:hover {
+		background: rgba(255, 255, 255, 0.12);
+	}
+
+	.doc-list-item-title {
+		font-size: 15px;
+		font-weight: 500;
+	}
+
+	.doc-list-item-date {
+		font-size: 12px;
+		color: var(--text-muted);
+		margin-top: 4px;
+	}
+
+	.theme-dark .doc-list-item-date,
+	.theme-mono .doc-list-item-date {
+		color: var(--text-muted-dark);
+	}
+
+	.theme-mono .doc-list-item-date {
+		color: var(--text-muted-mono);
 	}
 
 	.tb-btn {
