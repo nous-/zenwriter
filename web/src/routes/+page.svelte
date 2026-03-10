@@ -1,5 +1,5 @@
 <script>
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import backspaceSound from '$lib/sounds/backspace.mp3';
 	import returnSound from '$lib/sounds/return.mp3';
 	import spacebarSound from '$lib/sounds/spacebar.mp3';
@@ -44,6 +44,8 @@
 	let fontSizePopoverEl = $state(null);
 	let typeSounds = $state(false);
 	let textareaEl = $state(null);
+	/** @type {HTMLDivElement | null} */
+	let titleEl = $state(null);
 	let hideTimer = null;
 	let autosaveTimer = null;
 	let loaded = $state(false);
@@ -122,7 +124,7 @@
 		} catch {}
 	}
 
-	function openDoc(id) {
+	async function openDoc(id) {
 		const doc = documents.find((d) => d.id === id);
 		if (!doc) return;
 		try {
@@ -130,10 +132,12 @@
 			title = doc.title;
 			currentDocId = id;
 			updateCounts();
+			await tick();
+			if (titleEl) titleEl.textContent = title;
 		} catch {}
 	}
 
-	function newDoc() {
+	async function newDoc() {
 		saveToStorage();
 		const id = crypto.randomUUID?.() ?? `doc-${Date.now()}`;
 		const now = Date.now();
@@ -146,6 +150,8 @@
 		wordCount = 0;
 		charCount = 0;
 		lastSaved = '';
+		await tick();
+		if (titleEl) titleEl.textContent = title;
 	}
 
 	function backToList() {
@@ -338,17 +344,6 @@
 			<span class="brand">ZenWriter</span>
 		</div>
 
-		<div class="toolbar-center">
-			<input
-				type="text"
-				class="title-input"
-				placeholder="Untitled"
-				bind:value={title}
-				oninput={scheduleAutosave}
-				onclick={(e) => e.stopPropagation()}
-			/>
-		</div>
-
 		<div class="toolbar-right">
 			<div class="font-size-wrapper" bind:this={fontSizePopoverEl}>
 				<button class="tb-btn" class:tb-btn-active={fontSizeOpen} onclick={toggleFontSize} title="Font size">
@@ -413,6 +408,25 @@
 			</button>
 		</div>
 	</header>
+
+	<!-- Document title (editor view) -->
+	<div class="doc-title-wrap">
+		<div class="doc-title-inner" style="font-size: {fontSize}px;">
+			<span class="doc-title-placeholder" class:hidden={title.length > 0}>Untitled</span>
+			<div
+				class="doc-title-input"
+				contenteditable="true"
+				role="textbox"
+				aria-label="Document title"
+				tabindex="0"
+				bind:this={titleEl}
+				oninput={() => { title = titleEl?.textContent ?? ''; scheduleAutosave(); }}
+				onpaste={(e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData?.getData('text/plain') ?? ''); }}
+				onclick={(e) => e.stopPropagation()}
+				onkeydown={(e) => { if (e.key === 's' && (e.metaKey || e.ctrlKey)) return; e.stopPropagation(); }}
+			></div>
+		</div>
+	</div>
 
 	<!-- Editor area -->
 	<main class="editor-wrap">
@@ -505,48 +519,61 @@
 		color: var(--text-muted-mono);
 	}
 
-	.toolbar-center {
-		flex: 1;
+	.doc-title-wrap {
+		flex-shrink: 0;
 		display: flex;
 		justify-content: center;
-		max-width: 400px;
+		padding: 20px 24px 32px;
+		max-width: 680px;
 		margin: 0 auto;
+		width: 100%;
 	}
 
-	.title-input {
+	.doc-title-inner {
+		position: relative;
+		width: 100%;
+	}
+
+	.doc-title-placeholder {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 		font-family: 'Literata', Georgia, serif;
-		font-size: 15px;
-		font-weight: 400;
+		font-weight: 500;
+		text-align: center;
+		color: var(--text-muted);
+		pointer-events: none;
+		padding: 6px 12px;
+	}
+
+	.doc-title-placeholder.hidden {
+		display: none;
+	}
+
+	.theme-dark .doc-title-placeholder {
+		color: var(--text-muted-dark);
+	}
+
+	.theme-mono .doc-title-placeholder {
+		color: var(--text-muted-mono);
+	}
+
+	.doc-title-input {
+		font-family: 'Literata', Georgia, serif;
+		font-weight: 500;
 		text-align: center;
 		border: none;
 		outline: none;
 		background: transparent;
 		color: inherit;
 		width: 100%;
-		padding: 4px 8px;
-		border-bottom: 1px solid transparent;
-		transition: border-color 0.3s ease;
-	}
-
-	.title-input::placeholder {
-		color: var(--text-muted);
-	}
-
-	.theme-dark .title-input::placeholder,
-	.theme-mono .title-input::placeholder {
-		color: var(--text-muted-dark);
-	}
-
-	.theme-mono .title-input::placeholder {
-		color: var(--text-muted-mono);
-	}
-
-	.title-input:focus {
-		border-bottom-color: var(--accent);
-	}
-
-	.theme-mono .title-input:focus {
-		border-bottom-color: var(--accent-mono);
+		padding: 6px 12px;
+		min-height: 1.5em;
+		overflow-wrap: break-word;
+		word-wrap: break-word;
+		white-space: pre-wrap;
 	}
 
 	.toolbar-left,
@@ -947,7 +974,7 @@
 		display: flex;
 		justify-content: center;
 		overflow-y: auto;
-		padding: 0 24px;
+		padding: 24px 24px 0;
 	}
 
 	.editor {
