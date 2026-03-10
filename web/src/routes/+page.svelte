@@ -1,9 +1,21 @@
 <script>
 	import { onMount } from 'svelte';
+	import backspaceSound from '$lib/sounds/backspace.mp3';
+	import returnSound from '$lib/sounds/return.mp3';
+	import spacebarSound from '$lib/sounds/spacebar.mp3';
+	import key0 from '$lib/sounds/key-0.mp3';
+	import key1 from '$lib/sounds/key-1.mp3';
+	import key2 from '$lib/sounds/key-2.mp3';
+	import key3 from '$lib/sounds/key-3.mp3';
+	import key4 from '$lib/sounds/key-4.mp3';
+	import key5 from '$lib/sounds/key-5.mp3';
+	import key6 from '$lib/sounds/key-6.mp3';
 
 	const STORAGE_KEY = 'zenwriter_doc';
 	const TITLE_KEY = 'zenwriter_title';
 	const AUTOSAVE_MS = 2000;
+
+	const KEY_SOUNDS = [key0, key1, key2, key3, key4, key5, key6];
 
 	let title = $state('');
 	let content = $state('');
@@ -18,54 +30,29 @@
 	let fontSizeOpen = $state(false);
 	let fontSizePopoverEl = $state(null);
 	let typeSounds = $state(false);
-	let audioCtx = null;
-	let noiseBuffer = null;
 	let textareaEl = $state(null);
 	let hideTimer = null;
 	let autosaveTimer = null;
 	let loaded = $state(false);
 
-	function initAudio() {
-		if (audioCtx) return;
-		audioCtx = new AudioContext();
-		const len = Math.floor(audioCtx.sampleRate * 0.05);
-		noiseBuffer = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
-		const data = noiseBuffer.getChannelData(0);
-		for (let i = 0; i < len; i++) {
-			data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 8);
-		}
-	}
-
-	function playKeyClick() {
-		if (!audioCtx || !noiseBuffer) return;
-		if (audioCtx.state === 'suspended') audioCtx.resume();
-		const now = audioCtx.currentTime;
-
-		const src = audioCtx.createBufferSource();
-		src.buffer = noiseBuffer;
-
-		const filter = audioCtx.createBiquadFilter();
-		filter.type = 'bandpass';
-		filter.frequency.value = 3000 + Math.random() * 2000;
-		filter.Q.value = 1.5;
-
-		const gain = audioCtx.createGain();
-		gain.gain.setValueAtTime(0.15 + Math.random() * 0.05, now);
-		gain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
-
-		src.connect(filter);
-		filter.connect(gain);
-		gain.connect(audioCtx.destination);
-		src.start(now);
-		src.stop(now + 0.035);
+	function playKeySound(key) {
+		let url;
+		if (key === 'Backspace') url = backspaceSound;
+		else if (key === 'Enter') url = returnSound;
+		else if (key === ' ') url = spacebarSound;
+		else url = KEY_SOUNDS[Math.floor(Math.random() * KEY_SOUNDS.length)];
+		try {
+			const a = new Audio(url);
+			a.volume = 1;
+			a.play().catch(() => {});
+		} catch {}
 	}
 
 	function handleEditorKeydown(e) {
 		if (!typeSounds) return;
-		if (!audioCtx) initAudio();
 		if (e.metaKey || e.ctrlKey || e.altKey) return;
-		if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter' || e.key === 'Tab') {
-			playKeyClick();
+		if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter' || e.key === ' ' || e.key === 'Tab') {
+			playKeySound(e.key);
 		}
 	}
 
@@ -250,7 +237,7 @@
 				{/if}
 			</div>
 
-			<button class="tb-btn" class:tb-btn-active={typeSounds} onclick={(e) => { e.stopPropagation(); typeSounds = !typeSounds; if (typeSounds) { initAudio(); playKeyClick(); } saveToStorage(); }} title="Typing sounds">
+			<button class="tb-btn" class:tb-btn-active={typeSounds} onclick={(e) => { e.stopPropagation(); typeSounds = !typeSounds; if (typeSounds) playKeySound('a'); saveToStorage(); }} title="Typing sounds">
 				{#if typeSounds}
 					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
 				{:else}
