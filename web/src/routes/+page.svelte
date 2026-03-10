@@ -423,7 +423,7 @@
 				oninput={() => { title = titleEl?.textContent ?? ''; scheduleAutosave(); }}
 				onpaste={(e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData?.getData('text/plain') ?? ''); }}
 				onclick={(e) => e.stopPropagation()}
-				onkeydown={(e) => { if (e.key === 's' && (e.metaKey || e.ctrlKey)) return; e.stopPropagation(); }}
+				onkeydown={(e) => { handleEditorKeydown(e); if (e.key === 's' && (e.metaKey || e.ctrlKey)) return; e.stopPropagation(); }}
 			></div>
 		</div>
 	</div>
