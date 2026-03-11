@@ -61,7 +61,7 @@
 		{ id: 'dark', label: 'Dark' },
 		{ id: 'mono', label: 'Black & white' }
 	];
-	let theme = $state('light');
+	let theme = $state('mono');
 	let themeOpen = $state(false);
 	let themePopoverEl = $state(null);
 	let saveFlash = $state(false);
@@ -69,6 +69,8 @@
 	let fontSizeOpen = $state(false);
 	let fontSizePopoverEl = $state(null);
 	let typeSounds = $state(false);
+	/** @type {HTMLInputElement | null} */
+	let titleInputEl = $state(null);
 	/** @type {HTMLTextAreaElement | null} */
 	let editorEl = $state(null);
 	let hideTimer = null;
@@ -159,6 +161,8 @@
 			title = doc.title;
 			currentDocId = id;
 			updateCounts();
+			await tick();
+			titleInputEl?.focus();
 		} catch {}
 	}
 
@@ -175,6 +179,8 @@
 		wordCount = 0;
 		charCount = 0;
 		lastSaved = '';
+		await tick();
+		titleInputEl?.focus();
 	}
 
 	async function backToList() {
@@ -344,17 +350,22 @@
 			</div>
 		</header>
 
-		<main class="flex-1 overflow-y-auto flex flex-col items-center px-6 pt-10">
-			<button type="button" class="doc-list-add-btn mb-6" onclick={newDoc} title="New document">
-				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-			</button>
+		<main class="flex-1 overflow-y-auto flex flex-col items-center" style="padding: 40px 24px;">
+			<p class="font-serif text-sm text-(--text-muted) text-center leading-relaxed opacity-70" style="max-width: 400px;">Your writing is stored locally in your browser. Nothing is sent to a server. No account needed.</p>
+
+			<div style="margin-top: 48px; margin-bottom: 32px;">
+				<button type="button" class="doc-list-add-btn" onclick={newDoc} title="New document">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+				</button>
+			</div>
+
 			{#if documents.length === 0}
-				<div class="flex flex-col items-center justify-center gap-4 text-center py-15 px-6">
+				<div class="flex flex-col items-center justify-center text-center" style="gap: 16px; padding: 40px 24px;">
 					<p class="font-serif text-[22px] font-medium">No documents yet</p>
 					<p class="font-serif text-base text-(--text-muted)">Click + above to create your first document.</p>
 				</div>
 			{:else}
-				<ul class="w-full max-w-[520px] flex flex-col gap-1.5 list-none m-0 p-0">
+				<ul class="w-full flex flex-col list-none" style="max-width: 520px; gap: 10px;">
 					{#each [...documents].sort((a, b) => b.updatedAt - a.updatedAt) as doc (doc.id)}
 						<li>
 							<div class="doc-list-item-row">
@@ -380,10 +391,10 @@
 		<!-- Editor view -->
 		<header class="toolbar" class:toolbar-hidden={!toolbarVisible}>
 			<div class="flex items-center gap-1 min-w-[140px]">
-				<button class="tb-btn" onclick={(e) => { e.stopPropagation(); backToList(); }} title="Back to documents">
+				<button class="tb-btn" tabindex="-1" onclick={(e) => { e.stopPropagation(); backToList(); }} title="Back to documents">
 					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 18 9 12 15 6"/></svg>
 				</button>
-				<button type="button" class="brand brand-link" onclick={(e) => { e.stopPropagation(); backToList(); }}>ZenWriter</button>
+				<button type="button" tabindex="-1" class="brand brand-link" onclick={(e) => { e.stopPropagation(); backToList(); }}>ZenWriter</button>
 			</div>
 
 			<div class="flex-1 flex justify-center max-w-[400px] mx-auto">
@@ -391,6 +402,8 @@
 					type="text"
 					class="title-input"
 					placeholder="Title"
+					tabindex="0"
+					bind:this={titleInputEl}
 					bind:value={title}
 					oninput={scheduleAutosave}
 					onkeydown={handleEditorKeydown}
@@ -400,7 +413,7 @@
 
 			<div class="flex items-center gap-1 min-w-[140px] justify-end">
 				<div class="relative" bind:this={fontSizePopoverEl}>
-					<button class="tb-btn" class:tb-btn-active={fontSizeOpen} onclick={toggleFontSize} title="Font size">
+					<button class="tb-btn" tabindex="-1" class:tb-btn-active={fontSizeOpen} onclick={toggleFontSize} title="Font size">
 						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 20h6M7 20V4M10 4H4M14 20l4.5-16L23 20M15.5 16h7"/></svg>
 					</button>
 					{#if fontSizeOpen}
@@ -415,7 +428,7 @@
 					{/if}
 				</div>
 
-				<button class="tb-btn" class:tb-btn-active={typeSounds} onclick={async (e) => { e.stopPropagation(); typeSounds = !typeSounds; if (typeSounds) { await initSounds(); playKeySound('a'); } saveToStorage(); }} title="Typing sounds">
+				<button class="tb-btn" tabindex="-1" class:tb-btn-active={typeSounds} onclick={async (e) => { e.stopPropagation(); typeSounds = !typeSounds; if (typeSounds) { await initSounds(); playKeySound('a'); } saveToStorage(); }} title="Typing sounds">
 					{#if typeSounds}
 						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
 					{:else}
@@ -424,7 +437,7 @@
 				</button>
 
 				<div class="relative" bind:this={themePopoverEl}>
-					<button class="tb-btn" class:tb-btn-active={themeOpen} onclick={toggleThemeDropdown} title="Theme">
+					<button class="tb-btn" tabindex="-1" class:tb-btn-active={themeOpen} onclick={toggleThemeDropdown} title="Theme">
 						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
 					</button>
 					{#if themeOpen}
@@ -440,11 +453,11 @@
 					{/if}
 				</div>
 
-				<button class="tb-btn" onclick={(e) => { e.stopPropagation(); downloadFile(); }} title="Download">
+				<button class="tb-btn" tabindex="-1" onclick={(e) => { e.stopPropagation(); downloadFile(); }} title="Download">
 					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
 				</button>
 
-				<button class="tb-btn" onclick={(e) => { e.stopPropagation(); toggleFullscreen(); }} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+				<button class="tb-btn" tabindex="-1" onclick={(e) => { e.stopPropagation(); toggleFullscreen(); }} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
 					{#if isFullscreen}
 						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
 					{:else}
@@ -455,6 +468,7 @@
 		</header>
 
 		<textarea
+			tabindex="0"
 			bind:this={editorEl}
 			bind:value={content}
 			onfocus={showToolbar}
@@ -814,9 +828,7 @@
 		outline: none;
 		resize: none;
 		width: 100%;
-		max-width: 680px;
-		margin: 0 auto;
-		padding: 24px 24px 120px;
+		padding: 24px max(24px, calc(50% - 316px)) 120px;
 		caret-color: var(--accent);
 	}
 
