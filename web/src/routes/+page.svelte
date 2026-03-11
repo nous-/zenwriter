@@ -41,7 +41,7 @@
 	let fontSizeOpen = $state(false);
 	let fontSizePopoverEl = $state(null);
 	let typeSounds = $state(false);
-	/** @type {HTMLTextAreaElement | null} */
+	/** @type {HTMLDivElement | null} */
 	let editorEl = $state(null);
 	/** @type {HTMLDivElement | null} */
 	let titleEl = $state(null);
@@ -133,7 +133,7 @@
 			updateCounts();
 			await tick();
 			if (titleEl) titleEl.textContent = title;
-			if (editorEl) { editorEl.style.height = 'auto'; editorEl.style.height = editorEl.scrollHeight + 'px'; }
+			setEditorContent(content);
 		} catch {}
 	}
 
@@ -152,6 +152,7 @@
 		lastSaved = '';
 		await tick();
 		if (titleEl) titleEl.textContent = title;
+		setEditorContent(content);
 	}
 
 	function backToList() {
@@ -169,9 +170,19 @@
 		autosaveTimer = setTimeout(saveToStorage, AUTOSAVE_MS);
 	}
 
+	function readEditor() {
+		if (!editorEl) return '';
+		return editorEl.innerText;
+	}
+
+	function setEditorContent(text) {
+		if (!editorEl) return;
+		editorEl.innerHTML = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+	}
+
 	function handleInput() {
+		content = readEditor();
 		updateCounts();
-		if (editorEl) { editorEl.style.height = 'auto'; editorEl.style.height = editorEl.scrollHeight + 'px'; }
 		scheduleAutosave();
 	}
 
@@ -433,18 +444,24 @@
 						></div>
 					</div>
 				</div>
-				<textarea
-					class="editor"
-					style="font-size: {fontSize}px;"
-					placeholder="Begin writing..."
-					spellcheck="true"
-					bind:this={editorEl}
-					bind:value={content}
-					onfocus={showToolbar}
-					oninput={handleInput}
-					onkeydown={handleEditorKeydown}
-					onclick={(e) => e.stopPropagation()}
-				></textarea>
+				<div class="editor-body-wrap">
+					<span class="editor-placeholder" class:hidden={content.length > 0}>Begin writing...</span>
+					<div
+						class="editor"
+						contenteditable="true"
+						role="textbox"
+						aria-label="Document body"
+						tabindex="0"
+						spellcheck="true"
+						style="font-size: {fontSize}px;"
+						bind:this={editorEl}
+						onfocus={showToolbar}
+						oninput={handleInput}
+						onkeydown={handleEditorKeydown}
+						onpaste={(e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData?.getData('text/plain') ?? ''); }}
+						onclick={(e) => e.stopPropagation()}
+					></div>
+				</div>
 			</div>
 		{/if}
 	</main>
@@ -1002,34 +1019,47 @@
 		padding-bottom: 0;
 	}
 
+	.editor-body-wrap {
+		position: relative;
+		flex: 1;
+	}
+
+	.editor-placeholder {
+		position: absolute;
+		top: 0;
+		left: 0;
+		font-family: 'Literata', Georgia, serif;
+		font-weight: 300;
+		font-style: italic;
+		color: var(--text-muted);
+		pointer-events: none;
+	}
+
+	.editor-placeholder.hidden {
+		display: none;
+	}
+
+	.theme-dark .editor-placeholder {
+		color: var(--text-muted-dark);
+	}
+
+	.theme-mono .editor-placeholder {
+		color: var(--text-muted-mono);
+	}
+
 	.editor {
 		font-family: 'Literata', Georgia, serif;
 		font-weight: 300;
 		line-height: 1.8;
 		color: inherit;
-		background: transparent;
-		border: none;
 		outline: none;
-		resize: none;
 		width: 100%;
 		min-height: 300px;
 		padding-bottom: 120px;
 		caret-color: var(--accent);
-		overflow: hidden;
-	}
-
-	.editor::placeholder {
-		color: var(--text-muted);
-		font-style: italic;
-		font-weight: 300;
-	}
-
-	.theme-dark .editor::placeholder {
-		color: var(--text-muted-dark);
-	}
-
-	.theme-mono .editor::placeholder {
-		color: var(--text-muted-mono);
+		overflow-wrap: break-word;
+		word-wrap: break-word;
+		white-space: pre-wrap;
 	}
 
 	.theme-mono .editor {
@@ -1111,6 +1141,7 @@
 		}
 
 		.editor {
+			min-height: 200px;
 			padding-bottom: 80px;
 		}
 
