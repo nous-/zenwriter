@@ -69,10 +69,8 @@
 	let fontSizeOpen = $state(false);
 	let fontSizePopoverEl = $state(null);
 	let typeSounds = $state(false);
-	/** @type {HTMLDivElement | null} */
+	/** @type {HTMLTextAreaElement | null} */
 	let editorEl = $state(null);
-	/** @type {HTMLDivElement | null} */
-	let titleEl = $state(null);
 	let hideTimer = null;
 	let autosaveTimer = null;
 	let loaded = $state(false);
@@ -130,10 +128,10 @@
 				await dbSet(DOC_CONTENT_KEY(currentDocId), content);
 				const now = Date.now();
 				const list = documents.map((d) =>
-					d.id === currentDocId ? { ...d, title: title.trim() || 'Untitled', updatedAt: now } : d
+					d.id === currentDocId ? { ...d, title: title.trim(), updatedAt: now } : d
 				);
 				documents = list;
-				await dbSet(DOCS_LIST_KEY, documents);
+				await dbSet(DOCS_LIST_KEY, JSON.parse(JSON.stringify(documents)));
 				lastSaved = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 			}
 			await dbSet('zenwriter_theme', theme);
@@ -161,9 +159,6 @@
 			title = doc.title;
 			currentDocId = id;
 			updateCounts();
-			await tick();
-			if (titleEl) titleEl.textContent = title;
-			setEditorContent(content);
 		} catch {}
 	}
 
@@ -171,18 +166,15 @@
 		await saveToStorage();
 		const id = crypto.randomUUID?.() ?? `doc-${Date.now()}`;
 		const now = Date.now();
-		documents = [{ id, title: 'Untitled', updatedAt: now }, ...documents];
+		documents = [{ id, title: '', updatedAt: now }, ...documents];
 		await dbSet(DOC_CONTENT_KEY(id), '');
-		await dbSet(DOCS_LIST_KEY, documents);
+		await dbSet(DOCS_LIST_KEY, JSON.parse(JSON.stringify(documents)));
 		content = '';
-		title = 'Untitled';
+		title = '';
 		currentDocId = id;
 		wordCount = 0;
 		charCount = 0;
 		lastSaved = '';
-		await tick();
-		if (titleEl) titleEl.textContent = title;
-		setEditorContent(content);
 	}
 
 	async function backToList() {
@@ -198,9 +190,9 @@
 	async function deleteDoc(id) {
 		const doc = documents.find((d) => d.id === id);
 		if (!doc) return;
-		if (!confirm(`Delete "${doc.title}"?`)) return;
+		if (!confirm(`Delete "${doc.title || 'Untitled'}"?`)) return;
 		documents = documents.filter((d) => d.id !== id);
-		await dbSet(DOCS_LIST_KEY, documents);
+		await dbSet(DOCS_LIST_KEY, JSON.parse(JSON.stringify(documents)));
 		try { await dbSet(DOC_CONTENT_KEY(id), undefined); } catch {}
 	}
 
@@ -209,36 +201,15 @@
 		autosaveTimer = setTimeout(saveToStorage, AUTOSAVE_MS);
 	}
 
-	function readEditor() {
-		if (!editorEl) return '';
-		let html = editorEl.innerHTML;
-		html = html.replace(/<div><br\s*\/?><\/div>/gi, '\n');
-		html = html.replace(/<\/div>\s*<div>/gi, '\n');
-		html = html.replace(/<\/?div>/gi, '');
-		html = html.replace(/<br\s*\/?>/gi, '\n');
-		html = html.replace(/<[^>]+>/g, '');
-		html = html.replace(/&nbsp;/g, ' ');
-		html = html.replace(/&amp;/g, '&');
-		html = html.replace(/&lt;/g, '<');
-		html = html.replace(/&gt;/g, '>');
-		return html;
-	}
-
-	function setEditorContent(text) {
-		if (!editorEl) return;
-		editorEl.innerHTML = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-	}
-
 	function handleInput() {
-		content = readEditor();
 		updateCounts();
 		scheduleAutosave();
 	}
 
 	function downloadFile() {
 		saveToStorage();
-		const filename = (title.trim() || 'untitled') + '.md';
-		const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+		const filename = (title.trim() || 'untitled') + '.txt';
+		const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
 		a.href = url;
@@ -247,7 +218,6 @@
 		a.click();
 		document.body.removeChild(a);
 		URL.revokeObjectURL(url);
-
 		saveFlash = true;
 		setTimeout(() => (saveFlash = false), 1200);
 	}
@@ -272,8 +242,7 @@
 	function resetToolbarTimer() {
 		clearTimeout(hideTimer);
 		hideTimer = setTimeout(() => {
-			const active = document.activeElement;
-			if (active === editorEl || active === titleEl) {
+			if (document.activeElement === editorEl) {
 				toolbarVisible = false;
 			}
 		}, 3000);
@@ -351,12 +320,12 @@
 	onclick={focusEditor}
 	onkeydown={handleKeydown}
 >
-	<!-- Document list view -->
 	{#if loaded && currentDocId === null}
-		<header class="toolbar doc-list-toolbar">
+		<!-- Document list view -->
+		<header class="toolbar flex items-center justify-between px-6 py-3 shrink-0 z-10">
 			<span class="brand">ZenWriter</span>
-			<div class="toolbar-right">
-				<div class="theme-wrapper" bind:this={themePopoverEl}>
+			<div class="flex items-center gap-2">
+				<div class="relative" bind:this={themePopoverEl}>
 					<button class="tb-btn" class:tb-btn-active={themeOpen} onclick={toggleThemeDropdown} title="Theme">
 						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
 					</button>
@@ -374,23 +343,24 @@
 				</div>
 			</div>
 		</header>
-		<main class="doc-list-wrap">
-			<button type="button" class="doc-list-add-btn" onclick={newDoc} title="New document">
+
+		<main class="flex-1 overflow-y-auto flex flex-col items-center px-6 pt-10">
+			<button type="button" class="doc-list-add-btn mb-6" onclick={newDoc} title="New document">
 				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 			</button>
 			{#if documents.length === 0}
-				<div class="doc-list-empty">
-					<p class="doc-list-empty-title">No documents yet</p>
-					<p class="doc-list-empty-hint">Click + above to create your first document.</p>
+				<div class="flex flex-col items-center justify-center gap-4 text-center py-15 px-6">
+					<p class="font-serif text-[22px] font-medium">No documents yet</p>
+					<p class="font-serif text-base text-(--text-muted)">Click + above to create your first document.</p>
 				</div>
 			{:else}
-				<ul class="doc-list">
+				<ul class="w-full max-w-[520px] flex flex-col gap-1.5 list-none m-0 p-0">
 					{#each [...documents].sort((a, b) => b.updatedAt - a.updatedAt) as doc (doc.id)}
 						<li>
 							<div class="doc-list-item-row">
 								<button type="button" class="doc-list-item" onclick={() => openDoc(doc.id)}>
-									<span class="doc-list-item-title">{doc.title}</span>
-									<span class="doc-list-item-date">{new Date(doc.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+									<span class="text-lg font-medium leading-snug">{doc.title || 'Untitled'}</span>
+									<span class="text-[13px] text-(--text-muted) mt-1.5">{new Date(doc.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
 								</button>
 								<button type="button" class="doc-list-delete-btn" onclick={() => deleteDoc(doc.id)} title="Delete document">
 									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -401,141 +371,114 @@
 				</ul>
 			{/if}
 		</main>
-		<footer class="doc-list-footer">
-			<span class="doc-list-build">Build {BUILD_TIME ? new Date(BUILD_TIME).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+
+		<footer class="shrink-0 px-6 py-3 text-center">
+			<span class="font-serif text-[11px] text-(--text-muted) opacity-50">Build {BUILD_TIME ? new Date(BUILD_TIME).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
 		</footer>
+
 	{:else}
-	<!-- Toolbar (editor view) -->
-	<header class="toolbar" class:toolbar-hidden={!toolbarVisible}>
-		<div class="toolbar-left">
-			<button class="tb-btn tb-btn-icon" onclick={(e) => { e.stopPropagation(); backToList(); }} title="Back to documents">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 18 9 12 15 6"/></svg>
-			</button>
-			<button type="button" class="brand brand-link" onclick={(e) => { e.stopPropagation(); backToList(); }}>ZenWriter</button>
-		</div>
-
-		<div class="toolbar-right">
-			<div class="font-size-wrapper" bind:this={fontSizePopoverEl}>
-				<button class="tb-btn" class:tb-btn-active={fontSizeOpen} onclick={toggleFontSize} title="Font size">
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 20h6M7 20V4M10 4H4M14 20l4.5-16L23 20M15.5 16h7"/></svg>
+		<!-- Editor view -->
+		<header class="toolbar" class:toolbar-hidden={!toolbarVisible}>
+			<div class="flex items-center gap-1 min-w-[140px]">
+				<button class="tb-btn" onclick={(e) => { e.stopPropagation(); backToList(); }} title="Back to documents">
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 18 9 12 15 6"/></svg>
 				</button>
-				{#if fontSizeOpen}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<!-- svelte-ignore a11y_click_events_have_key_events -->
-					<div class="font-size-popover" onclick={(e) => e.stopPropagation()}>
-						<span class="fs-label">{fontSize}px</span>
-						<input
-							type="range"
-							min="12"
-							max="32"
-							step="1"
-							bind:value={fontSize}
-							oninput={saveToStorage}
-							class="fs-slider"
-							orient="vertical"
-						/>
-						<span class="fs-range-label fs-small">A</span>
-						<span class="fs-range-label fs-large">A</span>
-					</div>
-				{/if}
+				<button type="button" class="brand brand-link" onclick={(e) => { e.stopPropagation(); backToList(); }}>ZenWriter</button>
 			</div>
 
-			<button class="tb-btn" class:tb-btn-active={typeSounds} onclick={async (e) => { e.stopPropagation(); typeSounds = !typeSounds; if (typeSounds) { await initSounds(); playKeySound('a'); } saveToStorage(); }} title="Typing sounds">
-				{#if typeSounds}
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-				{:else}
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-				{/if}
-			</button>
+			<div class="flex-1 flex justify-center max-w-[400px] mx-auto">
+				<input
+					type="text"
+					class="title-input"
+					placeholder="Title"
+					bind:value={title}
+					oninput={scheduleAutosave}
+					onkeydown={handleEditorKeydown}
+					onclick={(e) => e.stopPropagation()}
+				/>
+			</div>
 
-			<div class="theme-wrapper" bind:this={themePopoverEl}>
-				<button class="tb-btn" class:tb-btn-active={themeOpen} onclick={toggleThemeDropdown} title="Theme">
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+			<div class="flex items-center gap-1 min-w-[140px] justify-end">
+				<div class="relative" bind:this={fontSizePopoverEl}>
+					<button class="tb-btn" class:tb-btn-active={fontSizeOpen} onclick={toggleFontSize} title="Font size">
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 20h6M7 20V4M10 4H4M14 20l4.5-16L23 20M15.5 16h7"/></svg>
+					</button>
+					{#if fontSizeOpen}
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<div class="font-size-popover" onclick={(e) => e.stopPropagation()}>
+							<span class="fs-label">{fontSize}px</span>
+							<input type="range" min="12" max="32" step="1" bind:value={fontSize} oninput={saveToStorage} class="fs-slider" orient="vertical" />
+							<span class="fs-range-label fs-small">A</span>
+							<span class="fs-range-label fs-large">A</span>
+						</div>
+					{/if}
+				</div>
+
+				<button class="tb-btn" class:tb-btn-active={typeSounds} onclick={async (e) => { e.stopPropagation(); typeSounds = !typeSounds; if (typeSounds) { await initSounds(); playKeySound('a'); } saveToStorage(); }} title="Typing sounds">
+					{#if typeSounds}
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+					{:else}
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+					{/if}
 				</button>
-				{#if themeOpen}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<!-- svelte-ignore a11y_click_events_have_key_events -->
-					<div class="theme-popover" onclick={(e) => e.stopPropagation()}>
-						{#each THEMES as t}
-							<button type="button" class="theme-option" class:theme-option-active={theme === t.id} onclick={() => setTheme(t.id)}>
-								{t.label}
-							</button>
-						{/each}
-					</div>
+
+				<div class="relative" bind:this={themePopoverEl}>
+					<button class="tb-btn" class:tb-btn-active={themeOpen} onclick={toggleThemeDropdown} title="Theme">
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+					</button>
+					{#if themeOpen}
+						<!-- svelte-ignore a11y_no_static_element_interactions -->
+						<!-- svelte-ignore a11y_click_events_have_key_events -->
+						<div class="theme-popover" onclick={(e) => e.stopPropagation()}>
+							{#each THEMES as t}
+								<button type="button" class="theme-option" class:theme-option-active={theme === t.id} onclick={() => setTheme(t.id)}>
+									{t.label}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
+
+				<button class="tb-btn" onclick={(e) => { e.stopPropagation(); downloadFile(); }} title="Download">
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+				</button>
+
+				<button class="tb-btn" onclick={(e) => { e.stopPropagation(); toggleFullscreen(); }} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
+					{#if isFullscreen}
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+					{:else}
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+					{/if}
+				</button>
+			</div>
+		</header>
+
+		<textarea
+			bind:this={editorEl}
+			bind:value={content}
+			onfocus={showToolbar}
+			oninput={handleInput}
+			onkeydown={handleEditorKeydown}
+			onclick={(e) => e.stopPropagation()}
+			class="editor"
+			style="font-size: {fontSize}px;"
+			placeholder="Begin writing..."
+			spellcheck="true"
+		></textarea>
+
+		<footer class="status-bar" class:toolbar-hidden={!toolbarVisible}>
+			<div class="flex items-center">
+				{#if lastSaved}
+					<span class="status-item" class:flash={saveFlash}>Saved {lastSaved}</span>
 				{/if}
 			</div>
-
-			<button class="tb-btn" onclick={(e) => { e.stopPropagation(); downloadFile(); }} title="Download">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-			</button>
-
-			<button class="tb-btn" onclick={(e) => { e.stopPropagation(); toggleFullscreen(); }} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
-				{#if isFullscreen}
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-				{:else}
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-				{/if}
-			</button>
-		</div>
-	</header>
-
-	<!-- Editor area (title + body scroll together) -->
-	<main class="editor-wrap">
-		{#if loaded}
-			<div class="editor-inner">
-				<div class="doc-title-wrap">
-					<div class="doc-title-inner" style="font-size: {fontSize}px;">
-						<span class="doc-title-placeholder" class:hidden={title.length > 0}>Untitled</span>
-						<div
-							class="doc-title-input"
-							contenteditable="true"
-							role="textbox"
-							aria-label="Document title"
-							tabindex="0"
-							bind:this={titleEl}
-							onfocus={showToolbar}
-							oninput={() => { title = titleEl?.textContent ?? ''; scheduleAutosave(); }}
-							onpaste={(e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData?.getData('text/plain') ?? ''); }}
-							onclick={(e) => e.stopPropagation()}
-							onkeydown={(e) => { handleEditorKeydown(e); if (e.key === 's' && (e.metaKey || e.ctrlKey)) return; e.stopPropagation(); }}
-						></div>
-					</div>
-				</div>
-				<div class="editor-body-wrap">
-					<span class="editor-placeholder" class:hidden={content.length > 0}>Begin writing...</span>
-					<div
-						class="editor"
-						contenteditable="true"
-						role="textbox"
-						aria-label="Document body"
-						tabindex="0"
-						spellcheck="true"
-						style="font-size: {fontSize}px;"
-						bind:this={editorEl}
-						onfocus={showToolbar}
-						oninput={handleInput}
-						onkeydown={handleEditorKeydown}
-						onpaste={(e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData?.getData('text/plain') ?? ''); }}
-						onclick={(e) => e.stopPropagation()}
-					></div>
-				</div>
+			<div class="flex items-center">
+				<span class="status-item">{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
+				<span class="status-sep">&middot;</span>
+				<span class="status-item">{charCount} {charCount === 1 ? 'char' : 'chars'}</span>
 			</div>
-		{/if}
-	</main>
-
-	<!-- Status bar -->
-	<footer class="status-bar" class:toolbar-hidden={!toolbarVisible}>
-		<div class="status-left">
-			{#if lastSaved}
-				<span class="status-item" class:flash={saveFlash}>Saved {lastSaved}</span>
-			{/if}
-		</div>
-		<div class="status-right">
-			<span class="status-item">{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
-			<span class="status-sep">&middot;</span>
-			<span class="status-item">{charCount} {charCount === 1 ? 'char' : 'chars'}</span>
-		</div>
-	</footer>
+		</footer>
 	{/if}
 </div>
 
@@ -586,6 +529,9 @@
 		text-transform: uppercase;
 		color: var(--text-muted);
 		user-select: none;
+		border: none;
+		background: none;
+		padding: 0;
 	}
 
 	.brand-link {
@@ -596,63 +542,15 @@
 		color: var(--text);
 	}
 
-	.theme-dark .brand-link:hover {
-		color: var(--text-dark);
-	}
+	.theme-dark .brand { color: var(--text-muted-dark); }
+	.theme-mono .brand { color: var(--text-muted-mono); }
+	.theme-dark .brand-link:hover { color: var(--text-dark); }
+	.theme-mono .brand-link:hover { color: var(--text-mono); }
 
-	.theme-mono .brand-link:hover {
-		color: var(--text-mono);
-	}
-
-	.theme-dark .brand,
-	.theme-mono .brand {
-		color: var(--text-muted-dark);
-	}
-
-	.theme-mono .brand {
-		color: var(--text-muted-mono);
-	}
-
-	.doc-title-wrap {
-		display: flex;
-		justify-content: center;
-		padding: 20px 0 32px;
-		width: 100%;
-	}
-
-	.doc-title-inner {
-		position: relative;
-		width: 100%;
-	}
-
-	.doc-title-placeholder {
-		position: absolute;
-		inset: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
+	/* Title input */
+	.title-input {
 		font-family: 'Literata', Georgia, serif;
-		font-weight: 500;
-		text-align: center;
-		color: var(--text-muted);
-		pointer-events: none;
-		padding: 6px 12px;
-	}
-
-	.doc-title-placeholder.hidden {
-		display: none;
-	}
-
-	.theme-dark .doc-title-placeholder {
-		color: var(--text-muted-dark);
-	}
-
-	.theme-mono .doc-title-placeholder {
-		color: var(--text-muted-mono);
-	}
-
-	.doc-title-input {
-		font-family: 'Literata', Georgia, serif;
+		font-size: 15px;
 		font-weight: 500;
 		text-align: center;
 		border: none;
@@ -660,87 +558,23 @@
 		background: transparent;
 		color: inherit;
 		width: 100%;
-		padding: 6px 12px;
-		min-height: 1.5em;
-		overflow-wrap: break-word;
-		word-wrap: break-word;
-		white-space: pre-wrap;
+		padding: 4px 8px;
 	}
 
-	.toolbar-left,
-	.toolbar-right {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		min-width: 140px;
-	}
-
-	.toolbar-right {
-		justify-content: flex-end;
-	}
-
-	.doc-list-toolbar {
-		justify-content: space-between;
-	}
-
-	.doc-list-toolbar .toolbar-right {
-		min-width: auto;
-		gap: 8px;
-	}
-
-	.doc-list-wrap {
-		flex: 1;
-		overflow-y: auto;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		padding: 40px 24px;
-	}
-
-	.doc-list-empty {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 16px;
-		text-align: center;
-		padding: 60px 24px;
-	}
-
-	.doc-list-empty-title {
-		font-family: 'Literata', Georgia, serif;
-		font-size: 22px;
-		font-weight: 500;
-		color: var(--text);
-	}
-
-	.theme-dark .doc-list-empty-title,
-	.theme-mono .doc-list-empty-title {
-		color: var(--text-dark);
-	}
-
-	.theme-mono .doc-list-empty-title {
-		color: var(--text-mono);
-	}
-
-	.doc-list-empty-hint {
-		font-family: 'Literata', Georgia, serif;
-		font-size: 16px;
+	.title-input::placeholder {
 		color: var(--text-muted);
 	}
 
-	.theme-dark .doc-list-empty-hint,
-	.theme-mono .doc-list-empty-hint {
-		color: var(--text-muted-dark);
-	}
+	.theme-dark .title-input::placeholder { color: var(--text-muted-dark); }
+	.theme-mono .title-input::placeholder { color: var(--text-muted-mono); }
 
+	/* Doc list */
 	.doc-list-add-btn {
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		width: 48px;
 		height: 48px;
-		margin-bottom: 24px;
 		border: none;
 		border-radius: 50%;
 		background: rgba(0, 0, 0, 0.06);
@@ -767,20 +601,7 @@
 		color: var(--text-dark);
 	}
 
-	.theme-mono .doc-list-add-btn:hover {
-		color: var(--text-mono);
-	}
-
-	.doc-list {
-		list-style: none;
-		width: 100%;
-		max-width: 520px;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-	}
+	.theme-mono .doc-list-add-btn:hover { color: var(--text-mono); }
 
 	.doc-list-item-row {
 		display: flex;
@@ -791,9 +612,7 @@
 		transition: background 0.2s ease;
 	}
 
-	.doc-list-item-row:hover {
-		background: rgba(0, 0, 0, 0.06);
-	}
+	.doc-list-item-row:hover { background: rgba(0, 0, 0, 0.06); }
 
 	.doc-list-item {
 		display: flex;
@@ -826,92 +645,24 @@
 		flex-shrink: 0;
 	}
 
-	.doc-list-item-row:hover .doc-list-delete-btn {
-		opacity: 1;
-	}
+	.doc-list-item-row:hover .doc-list-delete-btn { opacity: 1; }
 
 	.doc-list-delete-btn:hover {
 		color: #c0392b;
 		background: rgba(192, 57, 43, 0.08);
 	}
 
-	.theme-dark .doc-list-item-row {
-		background: rgba(255, 255, 255, 0.06);
-	}
-
-	.theme-dark .doc-list-item-row:hover {
-		background: rgba(255, 255, 255, 0.1);
-	}
-
-	.theme-dark .doc-list-item {
-		color: var(--text-dark);
-	}
-
-	.theme-mono .doc-list-item-row {
-		background: rgba(255, 255, 255, 0.06);
-	}
-
-	.theme-mono .doc-list-item-row:hover {
-		background: rgba(255, 255, 255, 0.12);
-	}
-
-	.theme-mono .doc-list-item {
-		color: var(--text-mono);
-	}
-
+	.theme-dark .doc-list-item-row { background: rgba(255, 255, 255, 0.06); }
+	.theme-dark .doc-list-item-row:hover { background: rgba(255, 255, 255, 0.1); }
+	.theme-dark .doc-list-item { color: var(--text-dark); }
+	.theme-mono .doc-list-item-row { background: rgba(255, 255, 255, 0.06); }
+	.theme-mono .doc-list-item-row:hover { background: rgba(255, 255, 255, 0.12); }
+	.theme-mono .doc-list-item { color: var(--text-mono); }
 	.theme-dark .doc-list-delete-btn,
-	.theme-mono .doc-list-delete-btn {
-		color: var(--text-muted-dark);
-	}
-
+	.theme-mono .doc-list-delete-btn { color: var(--text-muted-dark); }
 	.theme-dark .doc-list-delete-btn:hover,
-	.theme-mono .doc-list-delete-btn:hover {
-		color: #e74c3c;
-		background: rgba(231, 76, 60, 0.12);
-	}
-
-	.doc-list-item-title {
-		font-size: 18px;
-		font-weight: 500;
-		line-height: 1.4;
-	}
-
-	.doc-list-item-date {
-		font-size: 13px;
-		color: var(--text-muted);
-		margin-top: 6px;
-	}
-
-	.theme-dark .doc-list-item-date,
-	.theme-mono .doc-list-item-date {
-		color: var(--text-muted-dark);
-	}
-
-	.theme-mono .doc-list-item-date {
-		color: var(--text-muted-mono);
-	}
-
-	.doc-list-footer {
-		flex-shrink: 0;
-		padding: 12px 24px;
-		text-align: center;
-	}
-
-	.doc-list-build {
-		font-family: 'Literata', Georgia, serif;
-		font-size: 11px;
-		color: var(--text-muted);
-		opacity: 0.5;
-	}
-
-	.theme-dark .doc-list-build {
-		color: var(--text-muted-dark);
-	}
-
-	.theme-mono .doc-list-build {
-		color: var(--text-muted-mono);
-	}
-
+	.theme-mono .doc-list-delete-btn:hover { color: #e74c3c; background: rgba(231, 76, 60, 0.12); }
+	/* Toolbar buttons */
 	.tb-btn {
 		display: flex;
 		align-items: center;
@@ -932,23 +683,11 @@
 	}
 
 	.theme-dark .tb-btn,
-	.theme-mono .tb-btn {
-		color: var(--text-muted-dark);
-	}
-
-	.theme-mono .tb-btn {
-		color: var(--text-muted-mono);
-	}
-
+	.theme-mono .tb-btn { color: var(--text-muted-dark); }
+	.theme-mono .tb-btn { color: var(--text-muted-mono); }
 	.theme-dark .tb-btn:hover,
-	.theme-mono .tb-btn:hover {
-		background: rgba(255, 255, 255, 0.08);
-		color: var(--text-dark);
-	}
-
-	.theme-mono .tb-btn:hover {
-		color: var(--text-mono);
-	}
+	.theme-mono .tb-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-dark); }
+	.theme-mono .tb-btn:hover { color: var(--text-mono); }
 
 	.tb-btn-active {
 		background: rgba(0, 0, 0, 0.06);
@@ -956,19 +695,10 @@
 	}
 
 	.theme-dark .tb-btn-active,
-	.theme-mono .tb-btn-active {
-		background: rgba(255, 255, 255, 0.1);
-		color: var(--text-dark);
-	}
+	.theme-mono .tb-btn-active { background: rgba(255, 255, 255, 0.1); color: var(--text-dark); }
+	.theme-mono .tb-btn-active { color: var(--text-mono); }
 
-	.theme-mono .tb-btn-active {
-		color: var(--text-mono);
-	}
-
-	.theme-wrapper {
-		position: relative;
-	}
-
+	/* Popovers */
 	.theme-popover {
 		position: absolute;
 		top: calc(100% + 8px);
@@ -986,15 +716,8 @@
 	}
 
 	.theme-dark .theme-popover,
-	.theme-mono .theme-popover {
-		background: var(--toolbar-bg-dark);
-		border-color: rgba(255, 255, 255, 0.08);
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-	}
-
-	.theme-mono .theme-popover {
-		background: var(--toolbar-bg-mono);
-	}
+	.theme-mono .theme-popover { background: var(--toolbar-bg-dark); border-color: rgba(255, 255, 255, 0.08); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
+	.theme-mono .theme-popover { background: var(--toolbar-bg-mono); }
 
 	.theme-option {
 		display: block;
@@ -1010,37 +733,15 @@
 		transition: background 0.15s ease, color 0.15s ease;
 	}
 
-	.theme-option:hover {
-		background: rgba(0, 0, 0, 0.05);
-	}
-
+	.theme-option:hover { background: rgba(0, 0, 0, 0.05); }
 	.theme-dark .theme-option,
-	.theme-mono .theme-option {
-		color: var(--text-dark);
-	}
-
-	.theme-mono .theme-option {
-		color: var(--text-mono);
-	}
-
+	.theme-mono .theme-option { color: var(--text-dark); }
+	.theme-mono .theme-option { color: var(--text-mono); }
 	.theme-dark .theme-option:hover,
-	.theme-mono .theme-option:hover {
-		background: rgba(255, 255, 255, 0.08);
-	}
-
-	.theme-option-active {
-		background: rgba(0, 0, 0, 0.06);
-		font-weight: 500;
-	}
-
+	.theme-mono .theme-option:hover { background: rgba(255, 255, 255, 0.08); }
+	.theme-option-active { background: rgba(0, 0, 0, 0.06); font-weight: 500; }
 	.theme-dark .theme-option-active,
-	.theme-mono .theme-option-active {
-		background: rgba(255, 255, 255, 0.12);
-	}
-
-	.font-size-wrapper {
-		position: relative;
-	}
+	.theme-mono .theme-option-active { background: rgba(255, 255, 255, 0.12); }
 
 	.font-size-popover {
 		position: absolute;
@@ -1060,15 +761,8 @@
 	}
 
 	.theme-dark .font-size-popover,
-	.theme-mono .font-size-popover {
-		background: var(--toolbar-bg-dark);
-		border-color: rgba(255, 255, 255, 0.08);
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-	}
-
-	.theme-mono .font-size-popover {
-		background: var(--toolbar-bg-mono);
-	}
+	.theme-mono .font-size-popover { background: var(--toolbar-bg-dark); border-color: rgba(255, 255, 255, 0.08); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
+	.theme-mono .font-size-popover { background: var(--toolbar-bg-mono); }
 
 	.fs-label {
 		font-family: 'Literata', Georgia, serif;
@@ -1080,13 +774,8 @@
 	}
 
 	.theme-dark .fs-label,
-	.theme-mono .fs-label {
-		color: var(--text-muted-dark);
-	}
-
-	.theme-mono .fs-label {
-		color: var(--text-muted-mono);
-	}
+	.theme-mono .fs-label { color: var(--text-muted-dark); }
+	.theme-mono .fs-label { color: var(--text-muted-mono); }
 
 	.fs-slider {
 		writing-mode: vertical-lr;
@@ -1098,9 +787,7 @@
 		cursor: pointer;
 	}
 
-	.theme-mono .fs-slider {
-		accent-color: var(--accent-mono);
-	}
+	.theme-mono .fs-slider { accent-color: var(--accent-mono); }
 
 	.fs-range-label {
 		font-family: 'Literata', Georgia, serif;
@@ -1110,88 +797,38 @@
 	}
 
 	.theme-dark .fs-range-label,
-	.theme-mono .fs-range-label {
-		color: var(--text-muted-dark);
-	}
+	.theme-mono .fs-range-label { color: var(--text-muted-dark); }
+	.theme-mono .fs-range-label { color: var(--text-muted-mono); }
+	.fs-small { font-size: 10px; order: 4; }
+	.fs-large { font-size: 18px; font-weight: 500; order: -1; }
 
-	.theme-mono .fs-range-label {
-		color: var(--text-muted-mono);
-	}
-
-	.fs-small {
-		font-size: 10px;
-		order: 4;
-	}
-
-	.fs-large {
-		font-size: 18px;
-		font-weight: 500;
-		order: -1;
-	}
-
-	/* Editor */
-	.editor-wrap {
-		flex: 1;
-		overflow-y: auto;
-		padding: 0 24px;
-	}
-
-	.editor-inner {
-		width: 100%;
-		max-width: 680px;
-		margin: 0 auto;
-		display: flex;
-		flex-direction: column;
-		padding-top: 24px;
-		padding-bottom: 0;
-	}
-
-	.editor-body-wrap {
-		position: relative;
-		flex: 1;
-	}
-
-	.editor-placeholder {
-		position: absolute;
-		top: 0;
-		left: 0;
-		font-family: 'Literata', Georgia, serif;
-		font-weight: 300;
-		font-style: italic;
-		color: var(--text-muted);
-		pointer-events: none;
-	}
-
-	.editor-placeholder.hidden {
-		display: none;
-	}
-
-	.theme-dark .editor-placeholder {
-		color: var(--text-muted-dark);
-	}
-
-	.theme-mono .editor-placeholder {
-		color: var(--text-muted-mono);
-	}
-
+	/* Editor textarea - fills remaining space */
 	.editor {
+		flex: 1;
 		font-family: 'Literata', Georgia, serif;
 		font-weight: 300;
 		line-height: 1.8;
 		color: inherit;
+		background: transparent;
+		border: none;
 		outline: none;
+		resize: none;
 		width: 100%;
-		min-height: 300px;
-		padding-bottom: 120px;
+		max-width: 680px;
+		margin: 0 auto;
+		padding: 24px 24px 120px;
 		caret-color: var(--accent);
-		overflow-wrap: break-word;
-		word-wrap: break-word;
-		white-space: pre-wrap;
 	}
 
-	.theme-mono .editor {
-		caret-color: var(--accent-mono);
+	.editor::placeholder {
+		color: var(--text-muted);
+		font-style: italic;
+		font-weight: 300;
 	}
+
+	.theme-dark .editor::placeholder { color: var(--text-muted-dark); }
+	.theme-mono .editor::placeholder { color: var(--text-muted-mono); }
+	.theme-mono .editor { caret-color: var(--accent-mono); }
 
 	/* Status bar */
 	.status-bar {
@@ -1219,21 +856,10 @@
 	}
 
 	.theme-dark .status-item,
-	.theme-mono .status-item {
-		color: var(--text-muted-dark);
-	}
-
-	.theme-mono .status-item {
-		color: var(--text-muted-mono);
-	}
-
-	.status-item.flash {
-		color: var(--accent);
-	}
-
-	.theme-mono .status-item.flash {
-		color: var(--accent-mono);
-	}
+	.theme-mono .status-item { color: var(--text-muted-dark); }
+	.theme-mono .status-item { color: var(--text-muted-mono); }
+	.status-item.flash { color: var(--accent); }
+	.theme-mono .status-item.flash { color: var(--accent-mono); }
 
 	.status-sep {
 		font-size: 12px;
@@ -1242,46 +868,12 @@
 	}
 
 	.theme-dark .status-sep,
-	.theme-mono .status-sep {
-		color: var(--text-muted-dark);
-	}
+	.theme-mono .status-sep { color: var(--text-muted-dark); }
+	.theme-mono .status-sep { color: var(--text-muted-mono); }
 
-	.theme-mono .status-sep {
-		color: var(--text-muted-mono);
-	}
-
-	.status-left,
-	.status-right {
-		display: flex;
-		align-items: center;
-	}
-
-	/* Smooth tab behavior in textarea */
 	@media (max-width: 640px) {
-		.toolbar-left .brand {
-			display: none;
-		}
-
-		.toolbar-left,
-		.toolbar-right {
-			min-width: auto;
-		}
-
-		.editor {
-			min-height: 200px;
-			padding-bottom: 80px;
-		}
-
-		.toolbar {
-			padding: 10px 16px;
-		}
-
-		.status-bar {
-			padding: 8px 16px;
-		}
-
-		.editor-wrap {
-			padding: 0 16px;
-		}
+		.toolbar { padding: 10px 16px; }
+		.status-bar { padding: 8px 16px; }
+		.editor { padding: 16px 16px 80px; }
 	}
 </style>
