@@ -1,4 +1,4 @@
 # Zenwriter
 
-Live on [zenwriter.live](zenwriter.live).
+Live on [zenwriter.live](https://zenwriter.live).
 Enjoy.
