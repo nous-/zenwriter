@@ -641,7 +641,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		padding: 48px 24px;
+		padding: 40px 24px;
 	}
 
 	.doc-list-empty {
@@ -649,14 +649,14 @@
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 12px;
+		gap: 16px;
 		text-align: center;
-		padding: 48px 24px;
+		padding: 60px 24px;
 	}
 
 	.doc-list-empty-title {
 		font-family: 'Literata', Georgia, serif;
-		font-size: 18px;
+		font-size: 22px;
 		font-weight: 500;
 		color: var(--text);
 	}
@@ -672,7 +672,7 @@
 
 	.doc-list-empty-hint {
 		font-family: 'Literata', Georgia, serif;
-		font-size: 14px;
+		font-size: 16px;
 		color: var(--text-muted);
 	}
 
@@ -685,9 +685,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 44px;
-		height: 44px;
-		margin-bottom: 16px;
+		width: 48px;
+		height: 48px;
+		margin-bottom: 24px;
 		border: none;
 		border-radius: 50%;
 		background: rgba(0, 0, 0, 0.06);
@@ -721,12 +721,12 @@
 	.doc-list {
 		list-style: none;
 		width: 100%;
-		max-width: 480px;
+		max-width: 520px;
 		margin: 0;
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: 6px;
 	}
 
 	.doc-list-item {
@@ -734,7 +734,7 @@
 		flex-direction: column;
 		align-items: flex-start;
 		width: 100%;
-		padding: 16px 20px;
+		padding: 18px 24px;
 		border: none;
 		border-radius: 12px;
 		background: rgba(0, 0, 0, 0.03);
@@ -770,14 +770,15 @@
 	}
 
 	.doc-list-item-title {
-		font-size: 15px;
+		font-size: 18px;
 		font-weight: 500;
+		line-height: 1.4;
 	}
 
 	.doc-list-item-date {
-		font-size: 12px;
+		font-size: 13px;
 		color: var(--text-muted);
-		margin-top: 4px;
+		margin-top: 6px;
 	}
 
 	.theme-dark .doc-list-item-date,
