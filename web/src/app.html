@@ -3,10 +3,51 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+		<!-- Favicon (set dynamically by +layout.svelte) -->
+
+		<!-- Primary Meta Tags -->
+		<title>ZenWriter — Distraction-Free Writing</title>
+		<meta name="title" content="ZenWriter — Distraction-Free Writing" />
+		<meta name="description" content="A minimal, distraction-free writing app that lives in your browser. No accounts, no cloud — your words stay on your device." />
+		<meta name="keywords" content="writing app, distraction free, minimal writer, focus writing, browser writing tool, offline writer, zen writing" />
+		<meta name="author" content="ZenWriter" />
+		<meta name="theme-color" content="#000000" />
+		<meta name="color-scheme" content="dark light" />
+
+		<!-- Open Graph / Facebook -->
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content="ZenWriter — Distraction-Free Writing" />
+		<meta property="og:description" content="A minimal, distraction-free writing app that lives in your browser. No accounts, no cloud — your words stay on your device." />
+		<meta property="og:site_name" content="ZenWriter" />
+
+		<!-- Twitter -->
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:title" content="ZenWriter — Distraction-Free Writing" />
+		<meta name="twitter:description" content="A minimal, distraction-free writing app that lives in your browser. No accounts, no cloud — your words stay on your device." />
+
+		<!-- Fonts -->
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,300;0,7..72,400;0,7..72,500;1,7..72,300;1,7..72,400;1,7..72,500&display=swap" rel="stylesheet" />
-		<title>ZenWriter</title>
+
+		<!-- Structured Data -->
+		<script type="application/ld+json">
+		{
+			"@context": "https://schema.org",
+			"@type": "WebApplication",
+			"name": "ZenWriter",
+			"description": "A minimal, distraction-free writing app that lives in your browser. No accounts, no cloud — your words stay on your device.",
+			"applicationCategory": "Productivity",
+			"operatingSystem": "Any",
+			"offers": {
+				"@type": "Offer",
+				"price": "0",
+				"priceCurrency": "USD"
+			}
+		}
+		</script>
+
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
