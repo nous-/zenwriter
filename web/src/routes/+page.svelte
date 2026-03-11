@@ -7,7 +7,8 @@
 		saveGlobalPrefs, persistDocsList
 	} from '$lib/state.svelte.js';
 
-	const BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : '';
+	const BUILD_VERSION = typeof __BUILD_VERSION__ !== 'undefined' ? __BUILD_VERSION__ : '';
+	const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : '';
 
 	let themeOpen = $state(false);
 	let themePopoverEl = $state(null);
@@ -116,7 +117,7 @@
 </main>
 
 <footer class="shrink-0 px-6 py-3 text-center">
-	<span class="font-serif text-[11px] text-(--text-muted) opacity-50">Build {BUILD_TIME ? new Date(BUILD_TIME).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'} · <a href="https://github.com/nous-/zenwriter" target="_blank" rel="noopener noreferrer" class="underline hover:opacity-80">nous-/zenwriter</a></span>
+	<span class="font-serif text-[11px] text-(--text-muted) opacity-50">v{BUILD_VERSION}{BUILD_HASH ? ` (${BUILD_HASH})` : ''} · <a href="https://github.com/nous-/zenwriter" target="_blank" rel="noopener noreferrer" class="underline hover:opacity-80">nous-/zenwriter</a></span>
 </footer>
 
 <style>
