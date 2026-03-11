@@ -1,5 +1,6 @@
 <script>
 	import { onMount, tick } from 'svelte';
+	import { get as dbGet, set as dbSet } from 'idb-keyval';
 	import backspaceSound from '$lib/sounds/backspace.mp3';
 	import returnSound from '$lib/sounds/return.mp3';
 	import spacebarSound from '$lib/sounds/spacebar.mp3';
@@ -112,45 +113,43 @@
 		charCount = content.length;
 	}
 
-	function loadDocumentsList() {
+	async function loadDocumentsList() {
 		try {
-			const raw = localStorage.getItem(DOCS_LIST_KEY);
-			if (raw) {
-				const list = JSON.parse(raw);
-				if (Array.isArray(list)) {
-					documents = list.filter((d) => d && typeof d.id === 'string' && typeof d.title === 'string' && typeof d.updatedAt === 'number');
-					return;
-				}
+			const list = await dbGet(DOCS_LIST_KEY);
+			if (Array.isArray(list)) {
+				documents = list.filter((d) => d && typeof d.id === 'string' && typeof d.title === 'string' && typeof d.updatedAt === 'number');
+				return;
 			}
 		} catch {}
 		documents = [];
 	}
 
-	function saveToStorage() {
+	async function saveToStorage() {
 		try {
 			if (currentDocId) {
-				localStorage.setItem(DOC_CONTENT_KEY(currentDocId), content);
+				await dbSet(DOC_CONTENT_KEY(currentDocId), content);
 				const now = Date.now();
 				const list = documents.map((d) =>
 					d.id === currentDocId ? { ...d, title: title.trim() || 'Untitled', updatedAt: now } : d
 				);
 				documents = list;
-				localStorage.setItem(DOCS_LIST_KEY, JSON.stringify(documents));
+				await dbSet(DOCS_LIST_KEY, documents);
 				lastSaved = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 			}
-			localStorage.setItem('zenwriter_theme', theme);
-			localStorage.setItem('zenwriter_fontsize', String(fontSize));
-			localStorage.setItem('zenwriter_typesounds', typeSounds ? '1' : '0');
+			await dbSet('zenwriter_theme', theme);
+			await dbSet('zenwriter_fontsize', fontSize);
+			await dbSet('zenwriter_typesounds', typeSounds);
 		} catch {}
 	}
 
-	function loadGlobalPrefs() {
+	async function loadGlobalPrefs() {
 		try {
-			const savedTheme = localStorage.getItem('zenwriter_theme');
+			const savedTheme = await dbGet('zenwriter_theme');
 			if (savedTheme === 'dark' || savedTheme === 'mono' || savedTheme === 'light') theme = savedTheme;
-			const savedSize = parseInt(localStorage.getItem('zenwriter_fontsize') || '');
-			if (savedSize >= 12 && savedSize <= 32) fontSize = savedSize;
-			typeSounds = localStorage.getItem('zenwriter_typesounds') === '1';
+			const savedSize = await dbGet('zenwriter_fontsize');
+			if (typeof savedSize === 'number' && savedSize >= 12 && savedSize <= 32) fontSize = savedSize;
+			const savedSounds = await dbGet('zenwriter_typesounds');
+			if (typeof savedSounds === 'boolean') typeSounds = savedSounds;
 		} catch {}
 	}
 
@@ -158,7 +157,7 @@
 		const doc = documents.find((d) => d.id === id);
 		if (!doc) return;
 		try {
-			content = localStorage.getItem(DOC_CONTENT_KEY(id)) ?? '';
+			content = (await dbGet(DOC_CONTENT_KEY(id))) ?? '';
 			title = doc.title;
 			currentDocId = id;
 			updateCounts();
@@ -169,12 +168,12 @@
 	}
 
 	async function newDoc() {
-		saveToStorage();
+		await saveToStorage();
 		const id = crypto.randomUUID?.() ?? `doc-${Date.now()}`;
 		const now = Date.now();
 		documents = [{ id, title: 'Untitled', updatedAt: now }, ...documents];
-		localStorage.setItem(DOC_CONTENT_KEY(id), '');
-		localStorage.setItem(DOCS_LIST_KEY, JSON.stringify(documents));
+		await dbSet(DOC_CONTENT_KEY(id), '');
+		await dbSet(DOCS_LIST_KEY, documents);
 		content = '';
 		title = 'Untitled';
 		currentDocId = id;
@@ -186,8 +185,8 @@
 		setEditorContent(content);
 	}
 
-	function backToList() {
-		saveToStorage();
+	async function backToList() {
+		await saveToStorage();
 		currentDocId = null;
 		content = '';
 		title = '';
@@ -303,9 +302,9 @@
 		if (!fontSizeOpen && !themeOpen) editorEl?.focus();
 	}
 
-	onMount(() => {
-		loadGlobalPrefs();
-		loadDocumentsList();
+	onMount(async () => {
+		await loadGlobalPrefs();
+		await loadDocumentsList();
 		loaded = true;
 		document.addEventListener('fullscreenchange', handleFullscreenChange);
 		document.addEventListener('mousemove', showToolbar);
