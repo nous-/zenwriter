@@ -195,6 +195,15 @@
 		lastSaved = '';
 	}
 
+	async function deleteDoc(id) {
+		const doc = documents.find((d) => d.id === id);
+		if (!doc) return;
+		if (!confirm(`Delete "${doc.title}"?`)) return;
+		documents = documents.filter((d) => d.id !== id);
+		await dbSet(DOCS_LIST_KEY, documents);
+		try { await dbSet(DOC_CONTENT_KEY(id), undefined); } catch {}
+	}
+
 	function scheduleAutosave() {
 		clearTimeout(autosaveTimer);
 		autosaveTimer = setTimeout(saveToStorage, AUTOSAVE_MS);
@@ -378,10 +387,15 @@
 				<ul class="doc-list">
 					{#each [...documents].sort((a, b) => b.updatedAt - a.updatedAt) as doc (doc.id)}
 						<li>
-							<button type="button" class="doc-list-item" onclick={() => openDoc(doc.id)}>
-								<span class="doc-list-item-title">{doc.title}</span>
-								<span class="doc-list-item-date">{new Date(doc.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-							</button>
+							<div class="doc-list-item-row">
+								<button type="button" class="doc-list-item" onclick={() => openDoc(doc.id)}>
+									<span class="doc-list-item-title">{doc.title}</span>
+									<span class="doc-list-item-date">{new Date(doc.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+								</button>
+								<button type="button" class="doc-list-delete-btn" onclick={() => deleteDoc(doc.id)} title="Delete document">
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+								</button>
+							</div>
 						</li>
 					{/each}
 				</ul>
@@ -768,44 +782,92 @@
 		gap: 6px;
 	}
 
+	.doc-list-item-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		border-radius: 12px;
+		background: rgba(0, 0, 0, 0.03);
+		transition: background 0.2s ease;
+	}
+
+	.doc-list-item-row:hover {
+		background: rgba(0, 0, 0, 0.06);
+	}
+
 	.doc-list-item {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
-		width: 100%;
-		padding: 18px 24px;
+		flex: 1;
+		padding: 18px 0 18px 24px;
 		border: none;
-		border-radius: 12px;
-		background: rgba(0, 0, 0, 0.03);
+		background: transparent;
 		color: var(--text);
 		font-family: 'Literata', Georgia, serif;
 		text-align: left;
 		cursor: pointer;
-		transition: background 0.2s ease, color 0.2s ease;
 	}
 
-	.doc-list-item:hover {
-		background: rgba(0, 0, 0, 0.06);
+	.doc-list-delete-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		margin-right: 12px;
+		border: none;
+		background: transparent;
+		color: var(--text-muted);
+		border-radius: 8px;
+		cursor: pointer;
+		opacity: 0;
+		transition: opacity 0.2s ease, color 0.2s ease, background 0.2s ease;
+		flex-shrink: 0;
 	}
 
-	.theme-dark .doc-list-item,
-	.theme-mono .doc-list-item {
+	.doc-list-item-row:hover .doc-list-delete-btn {
+		opacity: 1;
+	}
+
+	.doc-list-delete-btn:hover {
+		color: #c0392b;
+		background: rgba(192, 57, 43, 0.08);
+	}
+
+	.theme-dark .doc-list-item-row {
 		background: rgba(255, 255, 255, 0.06);
-		color: var(--text-dark);
 	}
 
-	.theme-dark .doc-list-item:hover,
-	.theme-mono .doc-list-item:hover {
+	.theme-dark .doc-list-item-row:hover {
 		background: rgba(255, 255, 255, 0.1);
 	}
 
-	.theme-mono .doc-list-item {
+	.theme-dark .doc-list-item {
+		color: var(--text-dark);
+	}
+
+	.theme-mono .doc-list-item-row {
 		background: rgba(255, 255, 255, 0.06);
+	}
+
+	.theme-mono .doc-list-item-row:hover {
+		background: rgba(255, 255, 255, 0.12);
+	}
+
+	.theme-mono .doc-list-item {
 		color: var(--text-mono);
 	}
 
-	.theme-mono .doc-list-item:hover {
-		background: rgba(255, 255, 255, 0.12);
+	.theme-dark .doc-list-delete-btn,
+	.theme-mono .doc-list-delete-btn {
+		color: var(--text-muted-dark);
+	}
+
+	.theme-dark .doc-list-delete-btn:hover,
+	.theme-mono .doc-list-delete-btn:hover {
+		color: #e74c3c;
+		background: rgba(231, 76, 60, 0.12);
 	}
 
 	.doc-list-item-title {
