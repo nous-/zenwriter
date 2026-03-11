@@ -202,7 +202,17 @@
 
 	function readEditor() {
 		if (!editorEl) return '';
-		return editorEl.innerText;
+		let html = editorEl.innerHTML;
+		html = html.replace(/<div><br\s*\/?><\/div>/gi, '\n');
+		html = html.replace(/<\/div>\s*<div>/gi, '\n');
+		html = html.replace(/<\/?div>/gi, '');
+		html = html.replace(/<br\s*\/?>/gi, '\n');
+		html = html.replace(/<[^>]+>/g, '');
+		html = html.replace(/&nbsp;/g, ' ');
+		html = html.replace(/&amp;/g, '&');
+		html = html.replace(/&lt;/g, '<');
+		html = html.replace(/&gt;/g, '>');
+		return html;
 	}
 
 	function setEditorContent(text) {
