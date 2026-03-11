@@ -41,7 +41,7 @@
 	let fontSizeOpen = $state(false);
 	let fontSizePopoverEl = $state(null);
 	let typeSounds = $state(false);
-	/** @type {HTMLDivElement | null} */
+	/** @type {HTMLTextAreaElement | null} */
 	let editorEl = $state(null);
 	/** @type {HTMLDivElement | null} */
 	let titleEl = $state(null);
@@ -133,7 +133,7 @@
 			updateCounts();
 			await tick();
 			if (titleEl) titleEl.textContent = title;
-			if (editorEl) editorEl.textContent = content;
+			if (editorEl) { editorEl.style.height = 'auto'; editorEl.style.height = editorEl.scrollHeight + 'px'; }
 		} catch {}
 	}
 
@@ -152,7 +152,6 @@
 		lastSaved = '';
 		await tick();
 		if (titleEl) titleEl.textContent = title;
-		if (editorEl) editorEl.textContent = content;
 	}
 
 	function backToList() {
@@ -171,8 +170,8 @@
 	}
 
 	function handleInput() {
-		content = editorEl?.textContent ?? '';
 		updateCounts();
+		if (editorEl) { editorEl.style.height = 'auto'; editorEl.style.height = editorEl.scrollHeight + 'px'; }
 		scheduleAutosave();
 	}
 
@@ -344,7 +343,7 @@
 			<button class="tb-btn tb-btn-icon" onclick={(e) => { e.stopPropagation(); backToList(); }} title="Back to documents">
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 18 9 12 15 6"/></svg>
 			</button>
-			<span class="brand brand-link" onclick={(e) => { e.stopPropagation(); backToList(); }}>ZenWriter</span>
+			<button type="button" class="brand brand-link" onclick={(e) => { e.stopPropagation(); backToList(); }}>ZenWriter</button>
 		</div>
 
 		<div class="toolbar-right">
@@ -434,24 +433,18 @@
 						></div>
 					</div>
 				</div>
-				<div class="editor-body-wrap">
-					<span class="editor-placeholder" class:hidden={content.length > 0}>Begin writing...</span>
-					<div
-						class="editor"
-						contenteditable="true"
-						role="textbox"
-						aria-label="Document body"
-						tabindex="0"
-						spellcheck="true"
-						style="font-size: {fontSize}px;"
-						bind:this={editorEl}
-						onfocus={showToolbar}
-						oninput={handleInput}
-						onkeydown={handleEditorKeydown}
-						onpaste={(e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData?.getData('text/plain') ?? ''); }}
-						onclick={(e) => e.stopPropagation()}
-					></div>
-				</div>
+				<textarea
+					class="editor"
+					style="font-size: {fontSize}px;"
+					placeholder="Begin writing..."
+					spellcheck="true"
+					bind:this={editorEl}
+					bind:value={content}
+					onfocus={showToolbar}
+					oninput={handleInput}
+					onkeydown={handleEditorKeydown}
+					onclick={(e) => e.stopPropagation()}
+				></textarea>
 			</div>
 		{/if}
 	</main>
@@ -1009,47 +1002,34 @@
 		padding-bottom: 0;
 	}
 
-	.editor-body-wrap {
-		position: relative;
-		flex: 1;
-	}
-
-	.editor-placeholder {
-		position: absolute;
-		top: 0;
-		left: 0;
-		font-family: 'Literata', Georgia, serif;
-		font-weight: 300;
-		font-style: italic;
-		color: var(--text-muted);
-		pointer-events: none;
-	}
-
-	.editor-placeholder.hidden {
-		display: none;
-	}
-
-	.theme-dark .editor-placeholder {
-		color: var(--text-muted-dark);
-	}
-
-	.theme-mono .editor-placeholder {
-		color: var(--text-muted-mono);
-	}
-
 	.editor {
 		font-family: 'Literata', Georgia, serif;
 		font-weight: 300;
 		line-height: 1.8;
 		color: inherit;
+		background: transparent;
+		border: none;
 		outline: none;
+		resize: none;
 		width: 100%;
-		min-height: 200px;
+		min-height: 300px;
 		padding-bottom: 120px;
 		caret-color: var(--accent);
-		overflow-wrap: break-word;
-		word-wrap: break-word;
-		white-space: pre-wrap;
+		overflow: hidden;
+	}
+
+	.editor::placeholder {
+		color: var(--text-muted);
+		font-style: italic;
+		font-weight: 300;
+	}
+
+	.theme-dark .editor::placeholder {
+		color: var(--text-muted-dark);
+	}
+
+	.theme-mono .editor::placeholder {
+		color: var(--text-muted-mono);
 	}
 
 	.theme-mono .editor {
