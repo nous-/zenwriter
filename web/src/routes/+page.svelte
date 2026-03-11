@@ -16,7 +16,33 @@
 	const DOC_CONTENT_KEY = (id) => `zenwriter_doc_${id}`;
 	const AUTOSAVE_MS = 2000;
 
-	const KEY_SOUNDS = [key0, key1, key2, key3, key4, key5, key6];
+	const KEY_SOUND_URLS = [key0, key1, key2, key3, key4, key5, key6];
+
+	/** @type {AudioContext | null} */
+	let audioCtx = null;
+	/** @type {Map<string, AudioBuffer>} */
+	const soundBuffers = new Map();
+	let soundsReady = false;
+
+	async function initSounds() {
+		if (audioCtx) return;
+		audioCtx = new AudioContext();
+		const entries = [
+			['Backspace', backspaceSound],
+			['Enter', returnSound],
+			[' ', spacebarSound],
+			...KEY_SOUND_URLS.map((url, i) => [`key-${i}`, url])
+		];
+		await Promise.all(entries.map(async ([name, url]) => {
+			try {
+				const res = await fetch(url);
+				const buf = await res.arrayBuffer();
+				const decoded = await audioCtx.decodeAudioData(buf);
+				soundBuffers.set(name, decoded);
+			} catch {}
+		}));
+		soundsReady = true;
+	}
 
 	/** @type {{ id: string; title: string; updatedAt: number }[]} */
 	let documents = $state([]);
@@ -51,20 +77,24 @@
 	let loaded = $state(false);
 
 	function playKeySound(key) {
-		let url;
-		if (key === 'Backspace') url = backspaceSound;
-		else if (key === 'Enter') url = returnSound;
-		else if (key === ' ') url = spacebarSound;
-		else url = KEY_SOUNDS[Math.floor(Math.random() * KEY_SOUNDS.length)];
-		try {
-			const a = new Audio(url);
-			a.volume = 1;
-			a.play().catch(() => {});
-		} catch {}
+		if (!audioCtx || !soundsReady) return;
+		if (audioCtx.state === 'suspended') audioCtx.resume();
+		let buffer;
+		if (key === 'Backspace' || key === 'Enter' || key === ' ') {
+			buffer = soundBuffers.get(key);
+		} else {
+			buffer = soundBuffers.get(`key-${Math.floor(Math.random() * KEY_SOUND_URLS.length)}`);
+		}
+		if (!buffer) return;
+		const src = audioCtx.createBufferSource();
+		src.buffer = buffer;
+		src.connect(audioCtx.destination);
+		src.start(0);
 	}
 
 	function handleEditorKeydown(e) {
 		if (!typeSounds) return;
+		if (!audioCtx) initSounds();
 		if (e.metaKey || e.ctrlKey || e.altKey) return;
 		if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Enter' || e.key === ' ' || e.key === 'Tab') {
 			playKeySound(e.key);
@@ -387,7 +417,7 @@
 				{/if}
 			</div>
 
-			<button class="tb-btn" class:tb-btn-active={typeSounds} onclick={(e) => { e.stopPropagation(); typeSounds = !typeSounds; if (typeSounds) playKeySound('a'); saveToStorage(); }} title="Typing sounds">
+			<button class="tb-btn" class:tb-btn-active={typeSounds} onclick={async (e) => { e.stopPropagation(); typeSounds = !typeSounds; if (typeSounds) { await initSounds(); playKeySound('a'); } saveToStorage(); }} title="Typing sounds">
 				{#if typeSounds}
 					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
 				{:else}
