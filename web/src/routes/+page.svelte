@@ -11,6 +11,7 @@
 	import key5 from '$lib/sounds/key-5.mp3';
 	import key6 from '$lib/sounds/key-6.mp3';
 
+	const BUILD_TIME = typeof __BUILD_TIME__ !== 'undefined' ? __BUILD_TIME__ : '';
 	const DOCS_LIST_KEY = 'zenwriter_docs';
 	const DOC_CONTENT_KEY = (id) => `zenwriter_doc_${id}`;
 	const AUTOSAVE_MS = 2000;
@@ -347,6 +348,9 @@
 				</ul>
 			{/if}
 		</main>
+		<footer class="doc-list-footer">
+			<span class="doc-list-build">Build {BUILD_TIME ? new Date(BUILD_TIME).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+		</footer>
 	{:else}
 	<!-- Toolbar (editor view) -->
 	<header class="toolbar" class:toolbar-hidden={!toolbarVisible}>
@@ -782,6 +786,27 @@
 	}
 
 	.theme-mono .doc-list-item-date {
+		color: var(--text-muted-mono);
+	}
+
+	.doc-list-footer {
+		flex-shrink: 0;
+		padding: 12px 24px;
+		text-align: center;
+	}
+
+	.doc-list-build {
+		font-family: 'Literata', Georgia, serif;
+		font-size: 11px;
+		color: var(--text-muted);
+		opacity: 0.5;
+	}
+
+	.theme-dark .doc-list-build {
+		color: var(--text-muted-dark);
+	}
+
+	.theme-mono .doc-list-build {
 		color: var(--text-muted-mono);
 	}
 
