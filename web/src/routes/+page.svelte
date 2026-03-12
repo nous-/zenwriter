@@ -87,7 +87,7 @@
 	<p class="font-serif text-sm text-(--text-muted) text-center leading-relaxed opacity-70" style="max-width: 400px;">Your writing is stored locally in your browser. None of your writing is sent to a server. No account needed. Just you and your thoughts.</p>
 
 	<div style="margin-top: 48px; margin-bottom: 32px;">
-		<button type="button" class="doc-list-add-btn" onclick={newDoc} title="New document">
+		<button type="button" class="doc-list-add-btn " onclick={newDoc} title="New document">
 			<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 		</button>
 	</div>
@@ -242,11 +242,10 @@
 		color: var(--text);
 	}
 
-	:global(.theme-dark) .doc-list-add-btn,
-	:global(.theme-mono) .doc-list-add-btn { background: rgba(255, 255, 255, 0.08); color: var(--text-muted-dark); }
-	:global(.theme-dark) .doc-list-add-btn:hover,
-	:global(.theme-mono) .doc-list-add-btn:hover { background: rgba(255, 255, 255, 0.14); color: var(--text-dark); }
-	:global(.theme-mono) .doc-list-add-btn:hover { color: var(--text-mono); }
+	:global(.theme-dark) .doc-list-add-btn { background: rgba(255, 255, 255, 0.08); color: #fff; }
+	:global(.theme-mono) .doc-list-add-btn { background: rgba(255, 255, 255, 0.08); color: #fff; }
+	:global(.theme-dark) .doc-list-add-btn:hover { background: rgba(255, 255, 255, 0.14); color: var(--text-dark); }
+	:global(.theme-mono) .doc-list-add-btn:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
 
 	.doc-list-item-row {
 		display: flex;
