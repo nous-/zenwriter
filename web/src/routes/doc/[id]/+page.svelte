@@ -5,7 +5,8 @@
 	import {
 		DOC_CONTENT_KEY, THEMES,
 		getTheme, setThemeValue, getFontSize, setFontSize,
-		getTypeSounds, setTypeSounds, getDocuments, setDocuments,
+		getTypeSounds, setTypeSounds, getSpellCheck, setSpellCheck,
+		getDocuments, setDocuments,
 		saveGlobalPrefs, persistDocsList,
 		initSounds, playKeySound, hasSoundsCtx
 	} from '$lib/state.svelte.js';
@@ -203,6 +204,7 @@
 				class="title-input"
 				placeholder="Title"
 				tabindex="0"
+				spellcheck={getSpellCheck()}
 				bind:this={titleInputEl}
 				bind:value={title}
 				oninput={scheduleAutosave}
@@ -227,6 +229,10 @@
 					</div>
 				{/if}
 			</div>
+
+			<button class="tb-btn" tabindex="-1" class:tb-btn-active={getSpellCheck()} onclick={(e) => { e.stopPropagation(); setSpellCheck(!getSpellCheck()); saveGlobalPrefs(); }} title="Spell check">
+				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+			</button>
 
 			<button class="tb-btn" tabindex="-1" class:tb-btn-active={getTypeSounds()} onclick={async (e) => { e.stopPropagation(); setTypeSounds(!getTypeSounds()); if (getTypeSounds()) { await initSounds(); playKeySound('a'); } saveGlobalPrefs(); }} title="Typing sounds">
 				{#if getTypeSounds()}
@@ -278,7 +284,7 @@
 		class="editor"
 		style="font-size: {getFontSize()}px;"
 		placeholder="Begin writing..."
-		spellcheck="true"
+		spellcheck={getSpellCheck()}
 	></textarea>
 
 	<footer class="status-bar" class:toolbar-hidden={!toolbarVisible}>

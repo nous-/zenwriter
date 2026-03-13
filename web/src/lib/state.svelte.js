@@ -69,6 +69,7 @@ export function hasSoundsCtx() {
 let theme = $state('mono');
 let fontSize = $state(19);
 let typeSounds = $state(false);
+let spellCheck = $state(false);
 let documents = $state([]);
 
 export function getTheme() { return theme; }
@@ -77,6 +78,8 @@ export function getFontSize() { return fontSize; }
 export function setFontSize(v) { fontSize = v; }
 export function getTypeSounds() { return typeSounds; }
 export function setTypeSounds(v) { typeSounds = v; }
+export function getSpellCheck() { return spellCheck; }
+export function setSpellCheck(v) { spellCheck = v; }
 export function getDocuments() { return documents; }
 export function setDocuments(v) { documents = v; }
 
@@ -88,6 +91,8 @@ export async function loadGlobalPrefs() {
 		if (typeof savedSize === 'number' && savedSize >= 12 && savedSize <= 32) fontSize = savedSize;
 		const savedSounds = await dbGet('zenwriter_typesounds');
 		if (typeof savedSounds === 'boolean') typeSounds = savedSounds;
+		const savedSpell = await dbGet('zenwriter_spellcheck');
+		if (typeof savedSpell === 'boolean') spellCheck = savedSpell;
 	} catch {}
 }
 
@@ -96,6 +101,7 @@ export async function saveGlobalPrefs() {
 		await dbSet('zenwriter_theme', theme);
 		await dbSet('zenwriter_fontsize', fontSize);
 		await dbSet('zenwriter_typesounds', typeSounds);
+		await dbSet('zenwriter_spellcheck', spellCheck);
 	} catch {}
 }
 
