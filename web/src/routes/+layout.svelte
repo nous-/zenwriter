@@ -15,8 +15,8 @@
 </script>
 
 <svelte:head>
-	<title>ZenWriter — Distraction-Free Writing</title>
-	<meta name="description" content="A minimal, distraction-free writing app that lives in your browser. No accounts, no cloud — your words stay on your device." />
+	<title>ZenWriter — Free, Private Distraction-Free Writing</title>
+	<meta name="description" content="Free, private writing in your browser. Distraction-free and local-first — your words stay on your device. No account, no cloud." />
 	<link rel="icon" href={favicon} type="image/svg+xml" />
 </svelte:head>
 

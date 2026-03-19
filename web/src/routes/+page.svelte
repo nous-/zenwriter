@@ -84,7 +84,10 @@
 </header>
 
 <main class="flex-1 overflow-y-auto flex flex-col items-center" style="padding: 40px 24px;">
-	<p class="font-serif text-sm text-(--text-muted) text-center leading-relaxed opacity-70" style="max-width: 400px;">Your writing is stored locally in your browser. None of your writing is sent to a server. No account needed. Just you and your thoughts.</p>
+	<p class="font-serif text-sm text-(--text-muted) text-center leading-relaxed opacity-70" style="max-width: 400px">
+		ZenWriter is free and private. Your writing is saved only in your browser and never sent to a
+		server. No account needed—just you and your thoughts.
+	</p>
 
 	<div style="margin-top: 48px; margin-bottom: 32px;">
 		<button type="button" class="doc-list-add-btn " onclick={newDoc} title="New document">
