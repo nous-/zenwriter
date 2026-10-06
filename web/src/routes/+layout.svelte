@@ -1,12 +1,14 @@
 <script>
 	import './layout.css';
 	import { onMount } from 'svelte';
+	import { initAnalytics } from '$lib/firebase.js';
 	import { getTheme, loadGlobalPrefs, loadDocumentsList } from '$lib/state.svelte.js';
 
 	let { children } = $props();
 	let loaded = $state(false);
 
 	onMount(async () => {
+		initAnalytics();
 		await loadGlobalPrefs();
 		await loadDocumentsList();
 		loaded = true;
@@ -25,6 +27,7 @@
 <style>
 	.writer-root {
 		height: 100vh;
+		height: 100dvh;
 		width: 100vw;
 		display: flex;
 		flex-direction: column;

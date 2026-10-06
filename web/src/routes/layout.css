@@ -1,5 +1,9 @@
 @import 'tailwindcss';
 
+@theme {
+	--font-geist: 'Geist', ui-sans-serif, system-ui, sans-serif;
+}
+
 :root {
 	--bg: #FAF9F6;
 	--bg-dark: #1A1A1A;
@@ -17,10 +21,12 @@
 	--toolbar-bg-mono: rgba(0, 0, 0, 0.95);
 }
 
-* {
-	margin: 0;
-	padding: 0;
-	box-sizing: border-box;
+@layer base {
+	* {
+		margin: 0;
+		padding: 0;
+		box-sizing: border-box;
+	}
 }
 
 html, body {

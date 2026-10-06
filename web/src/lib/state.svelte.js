@@ -66,7 +66,7 @@ export function hasSoundsCtx() {
 }
 
 // Shared reactive prefs
-let theme = $state('mono');
+let theme = $state('light');
 let fontSize = $state(19);
 let typeSounds = $state(false);
 let spellCheck = $state(false);

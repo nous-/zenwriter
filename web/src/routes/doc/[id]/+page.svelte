@@ -1,5 +1,5 @@
 <script>
-	import { goto } from '$app/navigation';
+	import { goto, onNavigate } from '$app/navigation';
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { get as dbGet, set as dbSet } from 'idb-keyval';
 	import {
@@ -7,7 +7,7 @@
 		getTheme, setThemeValue, getFontSize, setFontSize,
 		getTypeSounds, setTypeSounds, getSpellCheck, setSpellCheck,
 		getDocuments, setDocuments,
-		saveGlobalPrefs, persistDocsList,
+		saveGlobalPrefs, persistDocsList, loadDocumentsList,
 		initSounds, playKeySound, hasSoundsCtx
 	} from '$lib/state.svelte.js';
 
@@ -18,20 +18,23 @@
 	let content = $state('');
 	let wordCount = $state(0);
 	let charCount = $state(0);
-	let lastSaved = $state('');
+	let saveStatus = $state('saved');
 	let isFullscreen = $state(false);
 	let toolbarVisible = $state(true);
-	let saveFlash = $state(false);
 	let themeOpen = $state(false);
 	let themePopoverEl = $state(null);
+	let themeButtonEl = $state(null);
 	let fontSizeOpen = $state(false);
 	let fontSizePopoverEl = $state(null);
+	let fontSizeButtonEl = $state(null);
 	/** @type {HTMLInputElement | null} */
 	let titleInputEl = $state(null);
 	/** @type {HTMLTextAreaElement | null} */
 	let editorEl = $state(null);
 	let hideTimer = null;
 	let autosaveTimer = null;
+	let ready = false;
+	let alive = true;
 
 	function countWords(text) {
 		const trimmed = text.trim();
@@ -44,28 +47,39 @@
 		charCount = content.length;
 	}
 
-	async function saveDoc() {
-		try {
-			await dbSet(DOC_CONTENT_KEY(docId), content);
-			const now = Date.now();
-			const docs = getDocuments();
-			setDocuments(docs.map((d) =>
-				d.id === docId ? { ...d, title: title.trim(), updatedAt: now, words: wordCount } : d
-			));
-			await persistDocsList();
-			lastSaved = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-		} catch {}
-		await saveGlobalPrefs();
-	}
-
-	function scheduleAutosave() {
+	function markDirty() {
+		if (!ready) return;
+		saveStatus = 'unsaved';
 		clearTimeout(autosaveTimer);
 		autosaveTimer = setTimeout(saveDoc, 2000);
 	}
 
+	async function saveDoc() {
+		if (!ready || saveStatus !== 'unsaved') return;
+		clearTimeout(autosaveTimer);
+		const id = docId;
+		const savedTitle = title.trim();
+		const savedBody = content;
+		const savedWords = countWords(savedBody);
+		try {
+			await dbSet(DOC_CONTENT_KEY(id), savedBody);
+			const now = Date.now();
+			const docs = getDocuments();
+			setDocuments(docs.map((d) =>
+				d.id === id ? { ...d, title: savedTitle, updatedAt: now, words: savedWords } : d
+			));
+			await persistDocsList();
+			if (!alive) return;
+			if (title.trim() === savedTitle && content === savedBody) saveStatus = 'saved';
+			else markDirty();
+		} catch {
+			if (alive) saveStatus = 'unsaved';
+		}
+	}
+
 	function handleInput() {
 		updateCounts();
-		scheduleAutosave();
+		markDirty();
 	}
 
 	function handleKeydown(e) {
@@ -78,11 +92,17 @@
 	}
 
 	function handleGlobalKeydown(e) {
+		if (e.key === 'Tab') showToolbar();
+		if (e.key === 'Escape') {
+			if (fontSizeOpen) fontSizeButtonEl?.focus();
+			else if (themeOpen) themeButtonEl?.focus();
+			fontSizeOpen = false;
+			themeOpen = false;
+			showToolbar();
+		}
 		if (e.key === 's' && (e.metaKey || e.ctrlKey)) {
 			e.preventDefault();
 			saveDoc();
-			saveFlash = true;
-			setTimeout(() => (saveFlash = false), 1200);
 		}
 	}
 
@@ -103,8 +123,6 @@
 		a.click();
 		document.body.removeChild(a);
 		URL.revokeObjectURL(url);
-		saveFlash = true;
-		setTimeout(() => (saveFlash = false), 1200);
 	}
 
 	function toggleFullscreen() {
@@ -127,7 +145,7 @@
 	function resetToolbarTimer() {
 		clearTimeout(hideTimer);
 		hideTimer = setTimeout(() => {
-			if (document.activeElement === editorEl) {
+			if (document.activeElement === editorEl && !fontSizeOpen && !themeOpen) {
 				toolbarVisible = false;
 			}
 		}, 3000);
@@ -136,12 +154,15 @@
 	function toggleFontSize(e) {
 		e.stopPropagation();
 		fontSizeOpen = !fontSizeOpen;
+		if (fontSizeOpen) themeOpen = false;
+		showToolbar();
 	}
 
 	function toggleThemeDropdown(e) {
 		e.stopPropagation();
 		themeOpen = !themeOpen;
 		if (themeOpen) fontSizeOpen = false;
+		showToolbar();
 	}
 
 	function handleClickOutside(e) {
@@ -153,13 +174,17 @@
 		setThemeValue(id);
 		themeOpen = false;
 		saveGlobalPrefs();
+		themeButtonEl?.focus();
 	}
 
-	function focusEditor() {
+	function focusEditor(e) {
+		if (e.target.closest('.toolbar')) return;
 		if (!fontSizeOpen && !themeOpen) editorEl?.focus();
 	}
 
 	onMount(async () => {
+		await loadDocumentsList();
+		if (!alive) return;
 		const docs = getDocuments();
 		const doc = docs.find((d) => d.id === docId);
 		if (!doc) {
@@ -167,10 +192,14 @@
 			return;
 		}
 		content = (await dbGet(DOC_CONTENT_KEY(docId))) ?? '';
+		if (!alive) return;
 		title = doc.title;
 		updateCounts();
+		ready = true;
+		saveStatus = 'saved';
 
 		document.addEventListener('fullscreenchange', handleFullscreenChange);
+		window.addEventListener('pagehide', saveDoc);
 		document.addEventListener('mousemove', showToolbar);
 		document.addEventListener('mousedown', handleClickOutside);
 
@@ -178,10 +207,17 @@
 		titleInputEl?.focus();
 	});
 
+	onNavigate(async () => {
+		await saveDoc();
+	});
+
 	onDestroy(() => {
-		saveDoc();
+		const dirty = ready && saveStatus === 'unsaved';
+		alive = false;
 		clearTimeout(hideTimer);
 		clearTimeout(autosaveTimer);
+		if (dirty) saveDoc();
+		window.removeEventListener('pagehide', saveDoc);
 		document.removeEventListener('fullscreenchange', handleFullscreenChange);
 		document.removeEventListener('mousemove', showToolbar);
 		document.removeEventListener('mousedown', handleClickOutside);
@@ -189,373 +225,346 @@
 </script>
 
 <svelte:head>
+	<title>{title.trim() || 'Untitled'} — ZenWriter</title>
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="flex flex-col flex-1 cursor-text" role="application" onclick={focusEditor} onkeydown={handleGlobalKeydown}>
-	<header class="toolbar" class:toolbar-hidden={!toolbarVisible}>
-		<div class="flex items-center gap-1 min-w-[140px]">
-			<button class="tb-btn" tabindex="-1" onclick={(e) => { e.stopPropagation(); backToList(); }} title="Back to documents">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 18 9 12 15 6"/></svg>
+<div class="editor-page" role="application" aria-label="Writing workspace" onclick={focusEditor} onkeydown={handleGlobalKeydown}>
+	<header class="toolbar" class:toolbar-hidden={!toolbarVisible} onfocusin={showToolbar}>
+		<div class="workspace-nav">
+			<button type="button" class="brand" onclick={backToList} aria-label="ZenWriter, back to documents">
+				<img src="/zenwriter-garden-mark.png" class="brand-mark" alt="" width="40" height="40" />
+				<span>zenwriter<span class="brand-period">.</span></span>
 			</button>
-			<button type="button" tabindex="-1" class="brand brand-link" onclick={(e) => { e.stopPropagation(); backToList(); }}>ZenWriter</button>
+			<span class="nav-divider" aria-hidden="true"></span>
+			<button type="button" class="back-link" onclick={backToList} aria-label="Back to documents">
+				<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
+				<span>Documents</span>
+			</button>
 		</div>
 
-		<div class="flex-1 flex justify-center max-w-[400px] mx-auto">
+		<div class="writing-tools" aria-label="Writing tools">
+			<div class="tool-group">
+				<div class="popover-anchor font-anchor" bind:this={fontSizePopoverEl}>
+					<button type="button" class="tool-button font-button" bind:this={fontSizeButtonEl} class:tool-button-active={fontSizeOpen} onclick={toggleFontSize} title="Font size" aria-label="Font size" aria-expanded={fontSizeOpen} aria-controls="font-size-popover">
+						<span class="type-icon" aria-hidden="true">Aa</span>
+						<span class="font-value" aria-hidden="true">{getFontSize()}</span>
+						<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+					</button>
+					{#if fontSizeOpen}
+						<div class="font-size-popover popover" id="font-size-popover">
+							<div class="popover-heading"><label for="writing-font-size">Text size</label><span>{getFontSize()}px</span></div>
+							<input id="writing-font-size" type="range" min="12" max="32" step="1" value={getFontSize()} oninput={(e) => { setFontSize(+e.target.value); saveGlobalPrefs(); }} class="font-slider" />
+							<div class="font-range" aria-hidden="true"><span>A</span><span>A</span></div>
+						</div>
+					{/if}
+				</div>
+
+				<button type="button" class="tool-button" class:tool-button-active={getSpellCheck()} onclick={() => { setSpellCheck(!getSpellCheck()); saveGlobalPrefs(); }} title="Spell check" aria-label="Spell check" aria-pressed={getSpellCheck()}>
+					<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" aria-hidden="true"><path d="m3 13 4-10 4 10M4.3 10h5.4M13 4h3a2.5 2.5 0 0 1 0 5h-3V4Zm0 5h3.5a2.5 2.5 0 0 1 0 5H13V9ZM8 19l3 3 9-8"/></svg>
+				</button>
+
+				<button type="button" class="tool-button" class:tool-button-active={getTypeSounds()} onclick={async () => { setTypeSounds(!getTypeSounds()); if (getTypeSounds()) { await initSounds(); playKeySound('a'); } saveGlobalPrefs(); }} title="Typing sounds" aria-label="Typing sounds" aria-pressed={getTypeSounds()}>
+					<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" aria-hidden="true"><path d="m11 5-5 4H3v6h3l5 4V5Z"/>{#if getTypeSounds()}<path d="M15 8a6 6 0 0 1 0 8M18 5a10 10 0 0 1 0 14"/>{:else}<path d="m16 9 5 6m0-6-5 6"/>{/if}</svg>
+				</button>
+			</div>
+
+			<span class="tool-divider" aria-hidden="true"></span>
+
+			<div class="tool-group">
+				<div class="popover-anchor theme-anchor" bind:this={themePopoverEl}>
+					<button type="button" class="tool-button" bind:this={themeButtonEl} class:tool-button-active={themeOpen} onclick={toggleThemeDropdown} title="Theme" aria-label="Theme" aria-expanded={themeOpen} aria-controls="theme-popover">
+						<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16V4Z" fill="currentColor" stroke="none"/></svg>
+					</button>
+					{#if themeOpen}
+						<div class="theme-popover popover" id="theme-popover">
+							<p class="popover-heading">Appearance</p>
+							{#each THEMES as t}
+								<button type="button" class="theme-option" class:theme-option-active={getTheme() === t.id} aria-pressed={getTheme() === t.id} onclick={() => setTheme(t.id)}>
+									<span class="theme-swatch" class:swatch-light={t.id === 'light'} class:swatch-dark={t.id === 'dark'} class:swatch-mono={t.id === 'mono'} aria-hidden="true"></span>
+									<span>{t.label}</span>
+									{#if getTheme() === t.id}<svg class="theme-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>{/if}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				</div>
+
+				<button type="button" class="tool-button" onclick={downloadFile} title="Download as text" aria-label="Download as text">
+					<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" aria-hidden="true"><path d="M5 16v4h14v-4M12 3v12m-5-5 5 5 5-5"/></svg>
+				</button>
+
+				<button type="button" class="tool-button" onclick={toggleFullscreen} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} aria-pressed={isFullscreen}>
+					{#if isFullscreen}
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" aria-hidden="true"><path d="M9 3v6H3m12-6v6h6M9 21v-6H3m12 6v-6h6"/></svg>
+					{:else}
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.55" aria-hidden="true"><path d="M9 3H3v6m12-6h6v6M3 15v6h6m12-6v6h-6"/></svg>
+					{/if}
+				</button>
+			</div>
+		</div>
+	</header>
+
+	<div class="writing-surface">
+		<div class="title-block">
 			<input
+				id="document-title"
 				type="text"
 				class="title-input"
-				placeholder="Title"
-				tabindex="0"
+				aria-label="Document title"
+				placeholder="Untitled"
 				spellcheck={getSpellCheck()}
 				bind:this={titleInputEl}
 				bind:value={title}
-				oninput={scheduleAutosave}
+				onfocus={showToolbar}
+				oninput={markDirty}
 				onkeydown={handleKeydown}
 				onclick={(e) => e.stopPropagation()}
 			/>
 		</div>
+		<textarea
+			bind:this={editorEl}
+			bind:value={content}
+			onfocus={showToolbar}
+			oninput={handleInput}
+			onkeydown={handleKeydown}
+			onclick={(e) => e.stopPropagation()}
+			class="editor"
+			style="font-size: {getFontSize()}px;"
+			placeholder="Begin writing…"
+			aria-label="Document content"
+			spellcheck={getSpellCheck()}
+		></textarea>
+	</div>
 
-		<div class="flex items-center gap-1 min-w-[140px] justify-end">
-			<div class="relative" bind:this={fontSizePopoverEl}>
-				<button class="tb-btn" tabindex="-1" class:tb-btn-active={fontSizeOpen} onclick={toggleFontSize} title="Font size">
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 20h6M7 20V4M10 4H4M14 20l4.5-16L23 20M15.5 16h7"/></svg>
-				</button>
-				{#if fontSizeOpen}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<!-- svelte-ignore a11y_click_events_have_key_events -->
-					<div class="font-size-popover" onclick={(e) => e.stopPropagation()}>
-						<span class="fs-label">{getFontSize()}px</span>
-						<input type="range" min="12" max="32" step="1" value={getFontSize()} oninput={(e) => { setFontSize(+e.target.value); saveGlobalPrefs(); }} class="fs-slider" orient="vertical" />
-						<span class="fs-range-label fs-small">A</span>
-						<span class="fs-range-label fs-large">A</span>
-					</div>
-				{/if}
-			</div>
-
-			<button class="tb-btn" tabindex="-1" class:tb-btn-active={getSpellCheck()} onclick={(e) => { e.stopPropagation(); setSpellCheck(!getSpellCheck()); saveGlobalPrefs(); }} title="Spell check">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-			</button>
-
-			<button class="tb-btn" tabindex="-1" class:tb-btn-active={getTypeSounds()} onclick={async (e) => { e.stopPropagation(); setTypeSounds(!getTypeSounds()); if (getTypeSounds()) { await initSounds(); playKeySound('a'); } saveGlobalPrefs(); }} title="Typing sounds">
-				{#if getTypeSounds()}
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-				{:else}
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-				{/if}
-			</button>
-
-			<div class="relative" bind:this={themePopoverEl}>
-				<button class="tb-btn" tabindex="-1" class:tb-btn-active={themeOpen} onclick={toggleThemeDropdown} title="Theme">
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-				</button>
-				{#if themeOpen}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
-					<!-- svelte-ignore a11y_click_events_have_key_events -->
-					<div class="theme-popover" onclick={(e) => e.stopPropagation()}>
-						{#each THEMES as t}
-							<button type="button" class="theme-option" class:theme-option-active={getTheme() === t.id} onclick={() => setTheme(t.id)}>
-								{t.label}
-							</button>
-						{/each}
-					</div>
-				{/if}
-			</div>
-
-			<button class="tb-btn" tabindex="-1" onclick={(e) => { e.stopPropagation(); downloadFile(); }} title="Download">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-			</button>
-
-			<button class="tb-btn" tabindex="-1" onclick={(e) => { e.stopPropagation(); toggleFullscreen(); }} title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}>
-				{#if isFullscreen}
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-				{:else}
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-				{/if}
-			</button>
-		</div>
-	</header>
-
-	<textarea
-		tabindex="0"
-		bind:this={editorEl}
-		bind:value={content}
-		onfocus={showToolbar}
-		oninput={handleInput}
-		onkeydown={handleKeydown}
-		onclick={(e) => e.stopPropagation()}
-		class="editor"
-		style="font-size: {getFontSize()}px;"
-		placeholder="Begin writing..."
-		spellcheck={getSpellCheck()}
-	></textarea>
-
-	<footer class="status-bar" class:toolbar-hidden={!toolbarVisible}>
-		<div class="flex items-center">
-			{#if lastSaved}
-				<span class="status-item" class:flash={saveFlash}>Saved {lastSaved}</span>
+	<footer class="status-bar" class:status-hidden={!toolbarVisible && saveStatus === 'saved'}>
+		<span class="save-state" class:is-saved={saveStatus === 'saved'} role="status" aria-live="polite">
+			{#if saveStatus === 'saved'}
+				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
+				Saved locally
+			{:else}
+				<span class="saving-dot" aria-hidden="true"></span>
+				Unsaved changes
 			{/if}
-		</div>
-		<div class="flex items-center">
-			<span class="status-item">{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
-			<span class="status-sep">&middot;</span>
-			<span class="status-item">{charCount} {charCount === 1 ? 'char' : 'chars'}</span>
+		</span>
+		<div class="document-counts">
+			<span>{wordCount.toLocaleString()} {wordCount === 1 ? 'word' : 'words'}</span>
+			<span class="status-separator" aria-hidden="true">/</span>
+			<span>{charCount.toLocaleString()} <span class="character-label">{charCount === 1 ? 'character' : 'characters'}</span><span class="character-label-short">{charCount === 1 ? 'char' : 'chars'}</span></span>
 		</div>
 	</footer>
 </div>
 
 <style>
+	.editor-page {
+		--paper: #f8f7f3;
+		--ink: #292b25;
+		--muted: #6b6d62;
+		--line: #e3e3da;
+		--soft: #eeeee7;
+		--accent-color: #ac573e;
+		--popover-bg: #fffefa;
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		min-width: 0;
+		min-height: 0;
+		background: var(--paper);
+		color: var(--ink);
+		cursor: text;
+		transition: background-color 0.35s ease, color 0.35s ease;
+	}
+	:global(.theme-dark) .editor-page {
+		--paper: #20211e;
+		--ink: #eeeae1;
+		--muted: #abaea1;
+		--line: #37392f;
+		--soft: #2c2e27;
+		--accent-color: #d99a7e;
+		--popover-bg: #292b25;
+	}
+	:global(.theme-mono) .editor-page {
+		--paper: #080808;
+		--ink: #f4f4f4;
+		--muted: #a5a5a5;
+		--line: #303030;
+		--soft: #222;
+		--accent-color: #f4f4f4;
+		--popover-bg: #151515;
+	}
 	.toolbar {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 12px 24px;
+		gap: 24px;
 		flex-shrink: 0;
-		transition: opacity 0.6s ease, transform 0.6s ease;
+		min-height: 92px;
+		padding: 20px 44px;
+		border-bottom: 1px solid var(--line);
+		cursor: default;
+		position: relative;
 		z-index: 10;
+		transition: opacity 0.45s ease, transform 0.45s ease;
 	}
-
-	.toolbar-hidden {
-		opacity: 0;
-		transform: translateY(-4px);
-		pointer-events: none;
-	}
-
+	.toolbar-hidden:not(:focus-within) { opacity: 0; transform: translateY(-5px); pointer-events: none; }
+	.workspace-nav, .brand, .back-link, .writing-tools, .tool-group { display: flex; align-items: center; }
+	.workspace-nav { gap: 24px; }
 	.brand {
-		font-family: 'Literata', Georgia, serif;
-		font-size: 14px;
-		font-weight: 500;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-		color: var(--text-muted);
-		user-select: none;
-		border: none;
-		background: none;
-		padding: 0;
-	}
-
-	.brand-link { cursor: pointer; }
-	.brand-link:hover { color: var(--text); }
-	:global(.theme-dark) .brand { color: var(--text-muted-dark); }
-	:global(.theme-mono) .brand { color: var(--text-muted-mono); }
-	:global(.theme-dark) .brand-link:hover { color: var(--text-dark); }
-	:global(.theme-mono) .brand-link:hover { color: var(--text-mono); }
-
-	.title-input {
-		font-family: 'Literata', Georgia, serif;
-		font-size: 15px;
-		font-weight: 500;
-		text-align: center;
-		border: none;
-		outline: none;
+		gap: 9px;
+		border: 0;
 		background: transparent;
-		color: inherit;
-		width: 100%;
-		padding: 4px 8px;
+		color: var(--ink);
+		font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+		font-size: 25px;
+		font-weight: 500;
+		letter-spacing: -1px;
+		cursor: pointer;
 	}
-
-	.title-input::placeholder { color: var(--text-muted); }
-	:global(.theme-dark) .title-input::placeholder { color: var(--text-muted-dark); }
-	:global(.theme-mono) .title-input::placeholder { color: var(--text-muted-mono); }
-
-	.tb-btn {
+	.brand-mark { width: 40px; height: 40px; object-fit: contain; mix-blend-mode: multiply; }
+	:global(.theme-dark) .brand-mark, :global(.theme-mono) .brand-mark { filter: invert(1); mix-blend-mode: screen; }
+	.brand-period { color: var(--accent-color); }
+	.nav-divider, .tool-divider { flex-shrink: 0; width: 1px; height: 22px; background: var(--line); }
+	.back-link {
+		gap: 7px;
+		padding: 8px 0;
+		border: 0;
+		background: transparent;
+		color: var(--muted);
+		font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+		font-size: 12px;
+		cursor: pointer;
+	}
+	.back-link:hover { color: var(--ink); }
+	.writing-tools { gap: 12px; }
+	.tool-group { gap: 4px; }
+	.tool-button {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 36px;
-		height: 36px;
-		border: none;
+		gap: 7px;
+		width: 38px;
+		height: 38px;
+		padding: 0;
+		border: 1px solid transparent;
+		border-radius: 9px;
 		background: transparent;
-		color: var(--text-muted);
-		border-radius: 8px;
+		color: var(--muted);
 		cursor: pointer;
-		transition: background 0.2s ease, color 0.2s ease;
+		transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
 	}
-
-	.tb-btn:hover { background: rgba(0, 0, 0, 0.05); color: var(--text); }
-	:global(.theme-dark) .tb-btn,
-	:global(.theme-mono) .tb-btn { color: var(--text-muted-dark); }
-	:global(.theme-mono) .tb-btn { color: var(--text-muted-mono); }
-	:global(.theme-dark) .tb-btn:hover,
-	:global(.theme-mono) .tb-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-dark); }
-	:global(.theme-mono) .tb-btn:hover { color: var(--text-mono); }
-	.tb-btn-active { background: rgba(0, 0, 0, 0.06); color: var(--text); }
-	:global(.theme-dark) .tb-btn-active,
-	:global(.theme-mono) .tb-btn-active { background: rgba(255, 255, 255, 0.1); color: var(--text-dark); }
-	:global(.theme-mono) .tb-btn-active { color: var(--text-mono); }
-
-	.theme-popover {
+	.tool-button:hover, .tool-button-active { background: var(--soft); color: var(--ink); }
+	.tool-button-active { border-color: var(--line); }
+	.font-button { width: auto; padding: 0 9px; }
+	.type-icon { font-family: 'Literata', Georgia, serif; font-size: 17px; letter-spacing: -1px; }
+	.font-value { font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; font-size: 11px; }
+	button:focus-visible, .title-input:focus-visible, .font-slider:focus-visible {
+		outline: 2px solid var(--accent-color);
+		outline-offset: 4px;
+	}
+	.popover-anchor { position: relative; }
+	.popover {
 		position: absolute;
-		top: calc(100% + 8px);
+		top: calc(100% + 12px);
 		right: 0;
-		display: flex;
-		flex-direction: column;
-		min-width: 140px;
-		padding: 6px 0;
-		background: var(--toolbar-bg);
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 10px;
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-		backdrop-filter: blur(12px);
-		z-index: 100;
+		padding: 16px;
+		border: 1px solid var(--line);
+		border-radius: 13px;
+		background: var(--popover-bg);
+		color: var(--ink);
+		box-shadow: 0 12px 30px rgb(0 0 0 / 9%);
+		font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+		cursor: default;
+		z-index: 20;
 	}
-
-	:global(.theme-dark) .theme-popover,
-	:global(.theme-mono) .theme-popover { background: var(--toolbar-bg-dark); border-color: rgba(255, 255, 255, 0.08); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
-	:global(.theme-mono) .theme-popover { background: var(--toolbar-bg-mono); }
-
-	.theme-option {
-		display: block;
-		width: 100%;
-		padding: 8px 14px;
-		border: none;
-		background: transparent;
-		color: var(--text);
-		font-family: 'Literata', Georgia, serif;
-		font-size: 13px;
-		text-align: left;
-		cursor: pointer;
-		transition: background 0.15s ease, color 0.15s ease;
-	}
-
-	.theme-option:hover { background: rgba(0, 0, 0, 0.05); }
-	:global(.theme-dark) .theme-option,
-	:global(.theme-mono) .theme-option { color: var(--text-dark); }
-	:global(.theme-mono) .theme-option { color: var(--text-mono); }
-	:global(.theme-dark) .theme-option:hover,
-	:global(.theme-mono) .theme-option:hover { background: rgba(255, 255, 255, 0.08); }
-	.theme-option-active { background: rgba(0, 0, 0, 0.06); font-weight: 500; }
-	:global(.theme-dark) .theme-option-active,
-	:global(.theme-mono) .theme-option-active { background: rgba(255, 255, 255, 0.12); }
-
-	.font-size-popover {
-		position: absolute;
-		top: calc(100% + 8px);
-		right: 0;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 6px;
-		padding: 14px 12px;
-		background: var(--toolbar-bg);
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 12px;
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-		backdrop-filter: blur(12px);
-		z-index: 100;
-	}
-
-	:global(.theme-dark) .font-size-popover,
-	:global(.theme-mono) .font-size-popover { background: var(--toolbar-bg-dark); border-color: rgba(255, 255, 255, 0.08); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); }
-	:global(.theme-mono) .font-size-popover { background: var(--toolbar-bg-mono); }
-
-	.fs-label {
-		font-family: 'Literata', Georgia, serif;
-		font-size: 11px;
-		font-weight: 500;
-		color: var(--text-muted);
-		letter-spacing: 0.03em;
-		user-select: none;
-	}
-
-	:global(.theme-dark) .fs-label,
-	:global(.theme-mono) .fs-label { color: var(--text-muted-dark); }
-	:global(.theme-mono) .fs-label { color: var(--text-muted-mono); }
-
-	.fs-slider {
-		writing-mode: vertical-lr;
-		direction: rtl;
-		appearance: slider-vertical;
-		width: 28px;
-		height: 140px;
-		accent-color: var(--accent);
-		cursor: pointer;
-	}
-
-	:global(.theme-mono) .fs-slider { accent-color: var(--accent-mono); }
-
-	.fs-range-label {
-		font-family: 'Literata', Georgia, serif;
-		color: var(--text-muted);
-		user-select: none;
-		line-height: 1;
-	}
-
-	:global(.theme-dark) .fs-range-label,
-	:global(.theme-mono) .fs-range-label { color: var(--text-muted-dark); }
-	:global(.theme-mono) .fs-range-label { color: var(--text-muted-mono); }
-	.fs-small { font-size: 10px; order: 4; }
-	.fs-large { font-size: 18px; font-weight: 500; order: -1; }
-
-	.editor {
-		flex: 1;
-		font-family: 'Literata', Georgia, serif;
-		font-weight: 300;
-		line-height: 1.8;
-		color: inherit;
-		background: transparent;
-		border: none;
-		outline: none;
-		resize: none;
-		width: 100%;
-		padding: 24px max(24px, calc(50% - 316px)) 120px;
-		caret-color: var(--accent);
-	}
-
-	.editor::placeholder {
-		color: var(--text-muted);
-		font-style: italic;
-		font-weight: 300;
-	}
-
-	:global(.theme-dark) .editor::placeholder { color: var(--text-muted-dark); }
-	:global(.theme-mono) .editor::placeholder { color: var(--text-muted-mono); }
-	:global(.theme-mono) .editor { caret-color: var(--accent-mono); }
-
-	.status-bar {
+	.popover-heading {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 10px 24px;
-		flex-shrink: 0;
-		transition: opacity 0.6s ease, transform 0.6s ease;
-		z-index: 10;
+		gap: 24px;
+		margin: 0 0 14px;
+		font-size: 11px;
+		font-weight: 500;
+		color: var(--muted);
 	}
-
-	.status-bar.toolbar-hidden {
-		opacity: 0;
-		transform: translateY(4px);
-		pointer-events: none;
+	.font-size-popover { width: 210px; }
+	.font-slider { display: block; width: 100%; height: 20px; accent-color: var(--accent-color); cursor: pointer; }
+	.font-range { display: flex; align-items: baseline; justify-content: space-between; margin-top: 7px; color: var(--muted); font-family: 'Literata', Georgia, serif; }
+	.font-range span:first-child { font-size: 12px; }
+	.font-range span:last-child { font-size: 20px; }
+	.theme-popover { width: 210px; padding: 14px 8px 8px; }
+	.theme-popover .popover-heading { padding: 0 8px; margin-bottom: 8px; }
+	.theme-option { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; border-radius: 7px; padding: 10px 8px; background: transparent; color: var(--ink); text-align: left; font-size: 12px; cursor: pointer; }
+	.theme-option:hover, .theme-option-active { background: var(--soft); }
+	.theme-swatch { width: 19px; height: 19px; border-radius: 50%; border: 1px solid rgb(120 120 110 / 35%); }
+	.swatch-light { background: #f8f7f3; }
+	.swatch-dark { background: #292b25; }
+	.swatch-mono { background: linear-gradient(90deg, #000 50%, #fff 50%); }
+	.theme-check { margin-left: auto; color: var(--accent-color); }
+	.writing-surface {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		width: min(720px, calc(100% - 56px));
+		min-width: 0;
+		min-height: 0;
+		margin: 0 auto;
+		padding-top: clamp(36px, 7.2vh, 80px);
 	}
-
-	.status-item {
-		font-family: 'Literata', Georgia, serif;
-		font-size: 12px;
-		color: var(--text-muted);
-		letter-spacing: 0.02em;
-		transition: color 0.3s ease;
+	.title-block { flex-shrink: 0; padding-bottom: 30px; }
+	.title-input { display: block; width: 100%; padding: 0 0 6px; border: 0; outline: none; background: transparent; color: var(--ink); font-family: 'Literata', Georgia, serif; font-size: clamp(32px, 3.5vw, 43px); font-weight: 400; line-height: 1.35; letter-spacing: -1.5px; }
+	.title-input::placeholder { color: var(--ink); opacity: 0.8; }
+	.editor { display: block; flex: 1; width: 100%; min-height: 0; padding: 0 0 70px; border: 0; outline: none; resize: none; background: transparent; color: var(--ink); font-family: 'Literata', Georgia, serif; font-weight: 300; line-height: 1.95; caret-color: var(--accent-color); scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+	.editor::placeholder { color: var(--muted); }
+	.status-bar { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-shrink: 0; padding: 20px 44px 22px; font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; font-size: 11px; color: var(--muted); transition: opacity 0.45s ease; }
+	.status-hidden { opacity: 0; }
+	.save-state, .document-counts { display: flex; align-items: center; gap: 8px; }
+	.save-state svg { color: var(--accent-color); }
+	.saving-dot { width: 5px; height: 5px; margin: 0 4px; border-radius: 50%; background: var(--accent-color); }
+	.document-counts { gap: 12px; font-variant-numeric: tabular-nums; }
+	.status-separator { color: var(--line); }
+	.character-label-short { display: none; }
+	@media (max-width: 850px) {
+		.toolbar { padding-inline: 28px; }
+		.workspace-nav { gap: 16px; }
+		.nav-divider { display: none; }
+		.back-link span { display: none; }
+		.back-link { padding: 10px 5px; }
+		.back-link svg { width: 18px; height: 18px; }
+		.status-bar { padding-inline: 28px; }
 	}
-
-	:global(.theme-dark) .status-item,
-	:global(.theme-mono) .status-item { color: var(--text-muted-dark); }
-	:global(.theme-mono) .status-item { color: var(--text-muted-mono); }
-	.status-item.flash { color: var(--accent); }
-	:global(.theme-mono) .status-item.flash { color: var(--accent-mono); }
-
-	.status-sep {
-		font-size: 12px;
-		color: var(--text-muted);
-		margin: 0 6px;
+	@media (max-width: 680px) {
+		.toolbar { flex-wrap: wrap; min-height: 0; padding: 16px 22px 13px; gap: 12px; }
+		.workspace-nav { width: 100%; justify-content: space-between; }
+		.brand { font-size: 21px; gap: 7px; }
+		.brand-mark { width: 33px; height: 33px; }
+		.back-link span { display: inline; }
+		.back-link svg { width: 14px; height: 14px; }
+		.writing-tools { width: 100%; justify-content: space-between; gap: 8px; }
+		.tool-group { gap: 7px; }
+		.tool-button { width: 37px; height: 35px; }
+		.font-button { width: 69px; padding-inline: 4px; }
+		.tool-divider { height: 19px; }
+		.font-size-popover { left: 0; right: auto; }
+		.writing-surface { width: calc(100% - 44px); padding-top: 36px; }
+		.title-block { padding-bottom: 23px; }
+		.title-input { font-size: 32px; letter-spacing: -1px; }
+		.editor { line-height: 1.85; padding-bottom: 40px; }
+		.status-bar { gap: 12px; padding: 16px 22px 20px; font-size: 10px; }
+		.document-counts { gap: 8px; }
+		.character-label { display: none; }
+		.character-label-short { display: inline; }
 	}
-
-	:global(.theme-dark) .status-sep,
-	:global(.theme-mono) .status-sep { color: var(--text-muted-dark); }
-	:global(.theme-mono) .status-sep { color: var(--text-muted-mono); }
-
-	@media (max-width: 640px) {
-		.toolbar { padding: 10px 16px; }
-		.status-bar { padding: 8px 16px; }
-		.editor { padding: 16px 16px 80px; }
+	@media (max-width: 340px) {
+		.toolbar { padding-inline: 16px; }
+		.tool-group { gap: 3px; }
+		.writing-tools { gap: 5px; }
+		.tool-button { width: 34px; }
+		.font-button { width: 63px; }
+		.writing-surface { width: calc(100% - 32px); }
+		.status-bar { padding-inline: 16px; }
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.editor-page, .toolbar, .tool-button, .status-bar { transition: none; }
 	}
 </style>
