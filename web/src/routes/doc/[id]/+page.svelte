@@ -188,6 +188,10 @@
 	});
 </script>
 
+<svelte:head>
+	<meta name="robots" content="noindex, nofollow" />
+</svelte:head>
+
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div class="flex flex-col flex-1 cursor-text" role="application" onclick={focusEditor} onkeydown={handleGlobalKeydown}>
 	<header class="toolbar" class:toolbar-hidden={!toolbarVisible}>

@@ -1,5 +1,7 @@
 <script>
+	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
+	import { onMount, onDestroy } from 'svelte';
 	import { get as dbGet, set as dbSet } from 'idb-keyval';
 	import {
 		DOCS_LIST_KEY, DOC_CONTENT_KEY, THEMES,
@@ -50,19 +52,18 @@
 		try { await dbSet(DOC_CONTENT_KEY(id), undefined); } catch {}
 	}
 
-	import { onMount, onDestroy } from 'svelte';
-
 	onMount(() => {
 		document.addEventListener('mousedown', handleClickOutsideTheme);
 	});
 
 	onDestroy(() => {
+		if (!browser) return;
 		document.removeEventListener('mousedown', handleClickOutsideTheme);
 	});
 </script>
 
 <header class="toolbar flex items-center justify-between px-6 py-3 shrink-0 z-10">
-	<span class="brand">ZenWriter</span>
+	<h1 class="brand">ZenWriter</h1>
 	<div class="flex items-center gap-2">
 		<div class="relative" bind:this={themePopoverEl}>
 			<button class="tb-btn" class:tb-btn-active={themeOpen} onclick={toggleThemeDropdown} title="Theme">
