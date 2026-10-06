@@ -7,7 +7,7 @@ const firebaseConfig = {
 	storageBucket: 'zenwriter-f24c8.firebasestorage.app',
 	messagingSenderId: '246635196723',
 	appId: '1:246635196723:web:3b231159b96e9129998e46',
-	measurementId: 'G-FKSEM5XCLG'
+	measurementId: 'G-Z6977W5P03'
 };
 
 export const firebaseApp = initializeApp(firebaseConfig);
