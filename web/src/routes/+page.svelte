@@ -1,9 +1,10 @@
 <script>
 	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
-	import { onMount, onDestroy, tick } from 'svelte';
+	import { getContext, onMount, onDestroy, tick } from 'svelte';
 	import { set as dbSet } from 'idb-keyval';
 	import { sendFeedback } from '$lib/firebase.js';
+	import Seo from '$lib/Seo.svelte';
 	import {
 		DOC_CONTENT_KEY, THEMES,
 		getTheme, setThemeValue, getDocuments, setDocuments,
@@ -12,6 +13,23 @@
 
 	const BUILD_VERSION = typeof __BUILD_VERSION__ !== 'undefined' ? __BUILD_VERSION__ : '';
 	const BUILD_HASH = typeof __BUILD_HASH__ !== 'undefined' ? __BUILD_HASH__ : '';
+	const isReady = getContext('writer-ready');
+	const description = 'A free online journal and distraction-free writing app. Keep entries in your browser with local autosave and text downloads. No account needed.';
+	const structuredData = {
+		'@context': 'https://schema.org',
+		'@graph': [
+			{ '@type': 'WebSite', '@id': 'https://zenwriter.live/#website', name: 'ZenWriter', url: 'https://zenwriter.live/' },
+			{
+				'@type': 'WebApplication', '@id': 'https://zenwriter.live/#app', name: 'ZenWriter',
+				url: 'https://zenwriter.live/', image: 'https://zenwriter.live/og.png', description,
+				applicationCategory: 'ProductivityApplication', operatingSystem: 'Any',
+				browserRequirements: 'Requires JavaScript and a modern web browser', isAccessibleForFree: true,
+				sameAs: 'https://github.com/nous-/zenwriter',
+				featureList: ['Distraction-free plain-text writing', 'Browser-local autosave', 'Word and character counts', 'Text file download', 'Light, dark, and black-and-white themes', 'Optional typing sounds'],
+				offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' }
+			}
+		]
+	};
 
 	let themeOpen = $state(false);
 	let themePopoverEl = $state(null);
@@ -35,6 +53,7 @@
 	));
 
 	function toggleThemeDropdown() {
+		if (!isReady()) return;
 		themeOpen = !themeOpen;
 		if (themeOpen) feedbackOpen = false;
 	}
@@ -66,6 +85,7 @@
 	}
 
 	function setTheme(id) {
+		if (!isReady()) return;
 		setThemeValue(id);
 		themeOpen = false;
 		saveGlobalPrefs();
@@ -73,7 +93,7 @@
 	}
 
 	async function newDoc() {
-		if (creating) return;
+		if (creating || !isReady()) return;
 		creating = true;
 		createError = '';
 		const id = crypto.randomUUID?.() ?? `doc-${Date.now()}`;
@@ -140,6 +160,8 @@
 	});
 </script>
 
+<Seo title="ZenWriter — Free Online Journal & Distraction-Free Writing" {description} {structuredData} />
+
 <svelte:window onkeydown={handleKeydown} />
 
 {#snippet arrow(size = 18)}
@@ -158,7 +180,7 @@
 	<div class="home-shell">
 		<header class="site-header">
 			<a class="brand" href="/" aria-label="ZenWriter home">
-				<img class="brand-mark" src="/zenwriter-garden-mark.png" alt="" width="42" height="42" />
+				<img class="brand-mark" src="/zenwriter-icon.png" alt="" width="42" height="42" />
 				<span>zenwriter<span class="brand-period">.</span></span>
 			</a>
 			<nav class="header-actions" aria-label="Preferences and feedback">
@@ -189,7 +211,7 @@
 				</div>
 				<span class="nav-divider" aria-hidden="true"></span>
 				<div class="popover-anchor" bind:this={themePopoverEl}>
-					<button type="button" class="theme-trigger" bind:this={themeButtonEl} aria-label="Change theme" aria-expanded={themeOpen} aria-controls="theme-panel" onclick={toggleThemeDropdown}>
+					<button type="button" class="theme-trigger" disabled={!isReady()} bind:this={themeButtonEl} aria-label="Change theme" aria-expanded={themeOpen} aria-controls="theme-panel" onclick={toggleThemeDropdown}>
 						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
 						<span class="theme-label">{THEMES.find((theme) => theme.id === getTheme())?.label}</span>
 						<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>
@@ -215,14 +237,15 @@
 				<div class="hero-copy">
 					<p class="eyebrow hero-eyebrow"><span class="status-dot"></span> A LITTLE LESS NOISE. A LITTLE MORE YOU.</p>
 					<h1 id="hero-title">A quiet place<br />to <em>find your words.</em></h1>
-					<p class="hero-description">An open page for whatever’s on your mind.<br class="desktop-break" /> No distractions. No account. Just you and your thoughts.</p>
+					<p class="hero-description">A free online journal and distraction-free writing app.<br class="desktop-break" /> No account. Just you and your thoughts.</p>
 					<div class="privacy-strip">
 						<span class="privacy-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2" /></svg></span>
 						<p><strong>Your words stay yours.</strong> Saved only in this browser. Never sent to a server.</p>
 					</div>
+					<noscript><p class="error-note">Enable JavaScript to write and open your saved documents.</p></noscript>
 					{#if docs.length === 0}
 						<div class="hero-actions">
-							<button type="button" class="primary-button hero-button" disabled={creating} onclick={newDoc}>Start writing {@render arrow()}</button>
+							<button type="button" class="primary-button hero-button" disabled={creating || !isReady()} onclick={newDoc}>Start writing {@render arrow()}</button>
 							<span class="cta-note">Free. Always.</span>
 						</div>
 					{:else}
@@ -258,7 +281,7 @@
 								<input type="search" aria-label="Search documents" placeholder="Find a document…" bind:value={search} />
 							</div>
 						{/if}
-						<button type="button" class="secondary-button" disabled={creating} onclick={newDoc}>{@render plus()} <span>New document</span></button>
+						<button type="button" class="secondary-button" disabled={creating || !isReady()} onclick={newDoc}>{@render plus()} <span>New document</span></button>
 					</div>
 				</div>
 				{#if createError}<p class="error-note" role="alert">{createError}</p>{/if}
@@ -266,7 +289,7 @@
 					<div class="empty-library">
 						<div class="empty-icon">{@render pageIcon(25)}</div>
 						<div><h3>A blank page. A fresh start.</h3><p>Your documents will feel right at home here.</p></div>
-						<button type="button" class="empty-action" aria-label="Create your first document" disabled={creating} onclick={newDoc}>{@render arrow(22)}</button>
+						<button type="button" class="empty-action" aria-label="Create your first document" disabled={creating || !isReady()} onclick={newDoc}>{@render arrow(22)}</button>
 					</div>
 				{:else if filteredDocs.length === 0}
 					<div class="no-results"><p>No documents match “{search}”.</p><button type="button" class="text-button" onclick={() => search = ''}>Clear search</button></div>
@@ -286,6 +309,25 @@
 				{/if}
 				{#if docs.length > 0}<div class="library-bottom"><span>Saved in this browser · Most recent first</span><button type="button" class="text-button delete-all" onclick={deleteAll}>Delete all documents</button></div>{/if}
 			</section>
+
+			{#if docs.length === 0}
+				<section class="product-details" aria-labelledby="features-title">
+					<p class="eyebrow">SIMPLE TOOLS. SPACE TO WRITE.</p>
+					<h2 id="features-title">A writing app that lets you settle in.</h2>
+					<div class="feature-grid">
+						<div><h3>A journal that starts with you</h3><p>Write a daily journal entry, collect notes, or work through a thought in a plain-text editor. Your drafts save automatically in this browser, with no signup to get in your way.</p></div>
+						<div><h3>Find your rhythm</h3><p>Choose a light, dark, or black-and-white theme. Adjust the text size, try optional typing sounds, and use fullscreen where your browser supports it.</p></div>
+						<div><h3>Take your words with you</h3><p>See your word and character counts as you write. Download a draft as a text file whenever you want a backup or a copy to edit somewhere else.</p></div>
+					</div>
+					<div class="writing-questions">
+						<details><summary>Is ZenWriter free to use?</summary><p>Yes. The writing app is free, and you can create documents without an account. Open a new document and start writing.</p></details>
+						<details><summary>Where is my writing saved?</summary><p>Your draft saves automatically in this browser after you pause typing. Check for “Saved locally” before closing the tab, or press Command+S on Mac or Ctrl+S on Windows and Linux. Documents do not sync between devices or browser profiles.</p></details>
+						<details><summary>How do I keep a copy of my writing?</summary><p>Choose “Download as text” in the editor to save a .txt file. Download important entries regularly: clearing site data, using private browsing, or losing access to this device can remove your drafts. You can open a downloaded file in another text editor or copy its text into a new document.</p></details>
+						<details><summary>Can I use it as an online journal?</summary><p>Yes. Create a separate document for each entry and give it a title you can find later. Your document text stays in the browser; anyone with access to the same browser profile may be able to read it. The app is not a password-protected journal.</p></details>
+						<details><summary>What does ZenWriter send to a server?</summary><p>Your document text stays in this browser. Google Analytics measures visits to this homepage; the writing workspace is excluded. If you send feedback, your note and optional email are sent so we can read them.</p></details>
+					</div>
+				</section>
+			{/if}
 		</main>
 
 		<footer class="site-footer">
@@ -442,6 +484,16 @@
 	.no-results { border: 1px dashed var(--home-line); padding: 40px 20px; text-align: center; border-radius: 8px; font-size: 13px; color: var(--home-muted); overflow-wrap: anywhere; }
 	.no-results button { margin-top: 10px; text-decoration: underline; text-underline-offset: 4px; }
 	.error-note { font-size: 12px; color: var(--home-accent); margin-bottom: 16px; }
+	.product-details { border-top: 1px solid var(--home-line); padding: 35px 0 44px; }
+	.product-details > h2 { font-family: 'Literata', Georgia, serif; font-weight: 400; font-size: 27px; letter-spacing: -.8px; line-height: 1.4; margin-top: 12px; }
+	.feature-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; margin-top: 26px; }
+	.feature-grid h3 { font-size: 12px; font-weight: 500; margin-bottom: 10px; }
+	.feature-grid p, .writing-questions p { color: var(--home-muted); font-size: 12px; line-height: 1.9; }
+	.writing-questions { margin-top: 28px; border-top: 1px solid var(--home-line); }
+	.writing-questions details { padding: 15px 0; border-bottom: 1px solid var(--home-line); }
+	.writing-questions summary { font-size: 12px; cursor: pointer; }
+	.writing-questions summary:focus-visible { outline: 2px solid var(--home-accent); outline-offset: 5px; }
+	.writing-questions p { max-width: 720px; margin-top: 12px; }
 	.site-footer { border-top: 1px solid var(--home-line); padding: 22px 0 25px; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--home-faint); font-size: 10px; }
 	.site-footer > p { font-family: 'Literata', Georgia, serif; font-style: italic; font-size: 12px; }
 	.site-footer > div, .site-footer a { display: inline-flex; align-items: center; gap: 8px; }
@@ -465,6 +517,9 @@
 		.document-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	}
 	@media (max-width: 600px) {
+		.feature-grid { grid-template-columns: 1fr; gap: 22px; }
+		.product-details { padding: 28px 0 34px; }
+		.product-details > h2 { font-size: 24px; }
 		.home-shell { padding: 0 22px; }
 		.site-header { padding: 21px 0; gap: 12px; }
 		.brand { font-size: 24px; gap: 5px; }

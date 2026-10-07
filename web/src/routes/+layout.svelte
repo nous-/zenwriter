@@ -1,23 +1,27 @@
 <script>
 	import './layout.css';
-	import { onMount } from 'svelte';
-	import { initAnalytics } from '$lib/firebase.js';
+	import { afterNavigate, beforeNavigate } from '$app/navigation';
+	import { onMount, setContext } from 'svelte';
+	import { disableAnalytics, initAnalytics } from '$lib/firebase.js';
 	import { getTheme, loadGlobalPrefs, loadDocumentsList } from '$lib/state.svelte.js';
 
 	let { children } = $props();
 	let loaded = $state(false);
-
+	setContext('writer-ready', () => loaded);
+	beforeNavigate(() => disableAnalytics());
+	afterNavigate(() => initAnalytics().catch(() => {}));
 	onMount(async () => {
-		initAnalytics();
-		await loadGlobalPrefs();
-		await loadDocumentsList();
-		loaded = true;
+		try {
+			await loadGlobalPrefs();
+			await loadDocumentsList();
+		} finally {
+			loaded = true;
+		}
 	});
 </script>
 
 <div
 	class="writer-root"
-	class:is-ready={loaded}
 	class:theme-dark={getTheme() === 'dark'}
 	class:theme-mono={getTheme() === 'mono'}
 >
@@ -34,11 +38,6 @@
 		background-color: var(--bg);
 		color: var(--text);
 		transition: background-color 0.5s ease, color 0.5s ease;
-	}
-
-	/* Hidden until theme and documents load, but present in the HTML for crawlers. */
-	.writer-root:not(.is-ready) {
-		visibility: hidden;
 	}
 
 	.writer-root.theme-dark {

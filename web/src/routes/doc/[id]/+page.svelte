@@ -1,6 +1,6 @@
 <script>
 	import { goto, onNavigate } from '$app/navigation';
-	import { onMount, onDestroy, tick } from 'svelte';
+	import { getContext, onMount, onDestroy, tick } from 'svelte';
 	import { get as dbGet, set as dbSet } from 'idb-keyval';
 	import {
 		DOC_CONTENT_KEY, THEMES,
@@ -12,6 +12,7 @@
 	} from '$lib/state.svelte.js';
 
 	let { data } = $props();
+	const isReady = getContext('writer-ready');
 	let docId = $derived(data.id);
 
 	let title = $state('');
@@ -33,7 +34,7 @@
 	let editorEl = $state(null);
 	let hideTimer = null;
 	let autosaveTimer = null;
-	let ready = false;
+	let ready = $state(false);
 	let alive = true;
 
 	function countWords(text) {
@@ -230,11 +231,11 @@
 </svelte:head>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="editor-page" role="application" aria-label="Writing workspace" onclick={focusEditor} onkeydown={handleGlobalKeydown}>
+<div class="editor-page" inert={!isReady() || !ready} aria-busy={!isReady() || !ready} role="application" aria-label="Writing workspace" onclick={focusEditor} onkeydown={handleGlobalKeydown}>
 	<header class="toolbar" class:toolbar-hidden={!toolbarVisible} onfocusin={showToolbar}>
 		<div class="workspace-nav">
 			<button type="button" class="brand" onclick={backToList} aria-label="ZenWriter, back to documents">
-				<img src="/zenwriter-garden-mark.png" class="brand-mark" alt="" width="40" height="40" />
+				<img src="/zenwriter-icon.png" class="brand-mark" alt="" width="40" height="40" />
 				<span>zenwriter<span class="brand-period">.</span></span>
 			</button>
 			<span class="nav-divider" aria-hidden="true"></span>

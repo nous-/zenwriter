@@ -12,10 +12,64 @@ const firebaseConfig = {
 
 export const firebaseApp = initializeApp(firebaseConfig);
 
+const publicAnalyticsPages = {
+	'/': 'ZenWriter — Free Online Journal'
+};
+const analyticsDisableKey = `ga-disable-${firebaseConfig.measurementId}`;
+let analyticsNavigation = 0;
+let previousPublicPage = '';
+let analyticsInstance;
+
+export function disableAnalytics() {
+	if (typeof window === 'undefined') return;
+	analyticsNavigation += 1;
+	// Apply synchronously, before navigation changes the URL or private document title.
+	window[analyticsDisableKey] = true;
+}
+
+function analyticsReferrer() {
+	if (previousPublicPage) return previousPublicPage;
+	try {
+		const referrer = new URL(document.referrer);
+		if (referrer.origin === window.location.origin) {
+			return Object.hasOwn(publicAnalyticsPages, referrer.pathname)
+				? `https://zenwriter.live${referrer.pathname}` : '';
+		}
+		return `${referrer.origin}${referrer.pathname}`;
+	} catch {
+		return '';
+	}
+}
+
 export async function initAnalytics() {
-	const { getAnalytics, isSupported } = await import('firebase/analytics');
+	if (typeof window === 'undefined') return;
+	const pathname = window.location.pathname;
+	if (!Object.hasOwn(publicAnalyticsPages, pathname)) {
+		disableAnalytics();
+		return;
+	}
+	const navigation = analyticsNavigation;
+	window[analyticsDisableKey] = true;
+	const { initializeAnalytics, isSupported, logEvent } = await import('firebase/analytics');
 	if (!(await isSupported())) return;
-	getAnalytics(firebaseApp);
+	if (navigation !== analyticsNavigation || window.location.pathname !== pathname) return;
+	analyticsInstance ??= initializeAnalytics(firebaseApp, {
+		config: {
+			send_page_view: false,
+			// Automatic events must never read a journal title, document ID, or URL query.
+			page_title: 'ZenWriter',
+			page_location: 'https://zenwriter.live/',
+			page_referrer: ''
+		}
+	});
+	const pageLocation = `https://zenwriter.live${pathname}`;
+	window[analyticsDisableKey] = false;
+	logEvent(analyticsInstance, 'page_view', {
+		page_title: publicAnalyticsPages[pathname],
+		page_location: pageLocation,
+		page_referrer: analyticsReferrer()
+	});
+	previousPublicPage = pageLocation;
 }
 
 export async function sendFeedback(message, email = '') {
