@@ -21,7 +21,7 @@
 			{ '@type': 'WebSite', '@id': 'https://zenwriter.live/#website', name: 'ZenWriter', url: 'https://zenwriter.live/' },
 			{
 				'@type': 'WebApplication', '@id': 'https://zenwriter.live/#app', name: 'ZenWriter',
-				url: 'https://zenwriter.live/', image: 'https://zenwriter.live/og.png', description,
+				url: 'https://zenwriter.live/', image: 'https://zenwriter.live/og.png?v=garden-logo-2', description,
 				applicationCategory: 'ProductivityApplication', operatingSystem: 'Any',
 				browserRequirements: 'Requires JavaScript and a modern web browser', isAccessibleForFree: true,
 				sameAs: 'https://github.com/nous-/zenwriter',

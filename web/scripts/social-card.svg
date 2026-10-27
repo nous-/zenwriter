@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1200" height="630" viewBox="0 0 1200 630">
+  <title>ZenWriter social sharing card</title>
+  <desc>The ZenWriter quill-and-garden logo above the name and the tagline: Free, private, distraction-free writing.</desc>
+  <rect width="1200" height="630" fill="#f8f7f3"/>
+  <g transform="translate(0 52)">
+    <image x="505" y="80" width="190" height="190" xlink:href="../static/zenwriter-garden-mark.png"/>
+    <text x="600" y="370" text-anchor="middle" fill="#292b25" font-family="Arial, Helvetica, sans-serif" font-size="88" font-weight="500" letter-spacing="-4">ZenWriter<tspan fill="#ac573e">.</tspan></text>
+    <text x="600" y="428" text-anchor="middle" fill="#6b6d62" font-family="Georgia, serif" font-size="27">Free, private, distraction-free writing.</text>
+  </g>
+</svg>

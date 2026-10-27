@@ -6,6 +6,7 @@
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
+		"build:social-image": "node scripts/generate-social-card.mjs",
 		"preview": "vite preview",
 		"test:seo": "node --test scripts/*.test.mjs",
 		"prepare": "svelte-kit sync || echo ''"

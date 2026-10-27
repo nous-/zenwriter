@@ -6,6 +6,7 @@ import { test } from 'node:test';
 const buildDirectory = new URL('../build/', import.meta.url);
 const serverDirectory = new URL('../.svelte-kit/output/server/', import.meta.url);
 const origin = 'https://zenwriter.live';
+const socialImageUrl = `${origin}/og.png?v=garden-logo-2`;
 const publicRoutes = ['/'];
 const removedRoutes = ['/guide', '/distraction-free-writing', '/online-journal'];
 
@@ -80,6 +81,17 @@ for (const route of publicRoutes) {
 		const ogUrls = meta.filter((tag) => tag.property === 'og:url');
 		assert.equal(ogUrls.length, 1, 'Each public page must have exactly one Open Graph URL');
 		assert.equal(ogUrls[0].content, `${origin}${route}`);
+		assert.deepEqual(meta.filter((tag) => tag.property === 'og:image').map((tag) => tag.content), [socialImageUrl]);
+		assert.deepEqual(meta.filter((tag) => tag.name === 'twitter:image').map((tag) => tag.content), [socialImageUrl]);
+		assert.equal(meta.find((tag) => tag.property === 'og:image:type')?.content, 'image/png');
+		const imagePath = new URL(new URL(socialImageUrl).pathname.slice(1), buildDirectory);
+		const image = readFileSync(imagePath);
+		assert.deepEqual(image.subarray(0, 8), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), 'The built social image must be a PNG');
+		assert.equal(image.toString('ascii', 12, 16), 'IHDR');
+		assert.equal(image.readUInt32BE(16), 1200);
+		assert.equal(image.readUInt32BE(20), 630);
+		assert.equal(meta.find((tag) => tag.property === 'og:image:width')?.content, String(image.readUInt32BE(16)));
+		assert.equal(meta.find((tag) => tag.property === 'og:image:height')?.content, String(image.readUInt32BE(20)));
 		assert.ok(!meta.some((tag) => tag.name === 'robots' && /noindex/i.test(tag.content || '')), 'Public pages must remain indexable');
 
 		const headings = [...html.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)];
@@ -91,6 +103,8 @@ for (const route of publicRoutes) {
 			assert.equal(item['@context'], 'https://schema.org');
 			assert.ok(item['@type'] || item['@graph'], 'JSON-LD must declare a type or graph');
 		}
+		const applications = data.flatMap((item) => item['@graph'] || [item]).filter((item) => item['@type'] === 'WebApplication');
+		assert.deepEqual(applications.map((item) => item.image), [socialImageUrl], 'Application schema must use the same social image');
 		checkVisibleBody(html);
 	});
 }
